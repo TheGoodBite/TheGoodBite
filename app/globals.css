@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+/* ── Apple-Inspired Design Tokens & Typography ── */
+:root {
+  --font-sans: var(--font-inter, "Inter", ui-sans-serif, system-ui, sans-serif);
+  --font-heading: var(--font-plus-jakarta, "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif);
+  --font-mono-num: var(--font-space-grotesk, "Space Grotesk", monospace);
+
+  /* Brand Palette Tokens */
+  --bg-primary:     #ffffff;
+  --bg-secondary:   #f5f5f7;
+  --text-primary:   #1d1d1f;
+  --text-secondary: #86868b;
+  --ios-green:      #34c759;
+  --ios-green-dark: #248a3d;
+  --ios-orange:     #ff9500;
+  --ios-red:        #ff3b30;
+  --btn-primary:    #000000;
+}
+
+/* ── Typography Utility Classes ── */
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+.font-num {
+  font-family: var(--font-mono-num);
+}
+
+/* ── Base Reset & Setup ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background-color: #fbfbfd;
+  background-image:
+    radial-gradient(circle at 10% 20%, rgba(52, 199, 89, 0.04) 0%, transparent 45%),
+    radial-gradient(circle at 90% 80%, rgba(52, 199, 89, 0.03) 0%, transparent 40%);
+}
+
+/* ── Focus Rings ── */
+:focus-visible {
+  outline: 2px solid #000000;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── Text Selection ── */
+::selection {
+  background: rgba(52, 199, 89, 0.2);
+  color: #1d1d1f;
+}
+
+/* ── Hide scrollbar for clean carousels ── */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Card & Glass Utilities ── */
+.apple-glass {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.apple-card {
+  background: #f5f5f7;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+/* ── Keyframe Animations ── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes popIn {
+  0%   { transform: scale(0.85); opacity: 0; }
+  70%  { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.pop-in {
+  animation: popIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
