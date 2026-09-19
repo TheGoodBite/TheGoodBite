@@ -10,7 +10,7 @@ import type { HealthInfo, SearchProductsResponse } from "@/lib/types";
 import { normalizeQuery, sha256, uniqueStrings } from "@/lib/utils";
 
 const schema = z.object({
-  items: z.array(z.string().min(1)).min(1).max(25),
+  items: z.array(z.string().min(1)).min(1).max(100),
   dietModes: z.array(z.string()).optional(),
   limitPerItem: z.number().int().min(1).max(20).optional()
 });

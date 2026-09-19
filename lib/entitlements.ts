@@ -6,8 +6,8 @@ export function getEntitlement(status: SubscriptionStatus | null | undefined): E
 
   return {
     isPaid,
-    searchItemLimitPerDay: isPaid ? 100 : 3,
-    optionsPerItem: isPaid ? 10 : 5,
+    searchItemLimitPerDay: 999999, // Unlimited searches
+    optionsPerItem: isPaid ? 10 : 10, // 10 options per item
     canSaveLists: isPaid,
     canTrackBought: isPaid,
     canUseDietModes: isPaid,

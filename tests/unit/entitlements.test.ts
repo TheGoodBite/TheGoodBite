@@ -5,8 +5,8 @@ describe("getEntitlement", () => {
   it("returns free tier for null status", () => {
     const e = getEntitlement(null);
     expect(e.isPaid).toBe(false);
-    expect(e.searchItemLimitPerDay).toBe(3);
-    expect(e.optionsPerItem).toBe(5);
+    expect(e.searchItemLimitPerDay).toBe(999999);
+    expect(e.optionsPerItem).toBe(10);
     expect(e.canSaveLists).toBe(false);
     expect(e.canTrackBought).toBe(false);
     expect(e.canUseDietModes).toBe(false);
@@ -15,14 +15,14 @@ describe("getEntitlement", () => {
   it("returns free tier for 'free' status", () => {
     const e = getEntitlement("free");
     expect(e.isPaid).toBe(false);
-    expect(e.searchItemLimitPerDay).toBe(3);
-    expect(e.optionsPerItem).toBe(5);
+    expect(e.searchItemLimitPerDay).toBe(999999);
+    expect(e.optionsPerItem).toBe(10);
   });
 
   it("returns paid tier for 'active' status", () => {
     const e = getEntitlement("active");
     expect(e.isPaid).toBe(true);
-    expect(e.searchItemLimitPerDay).toBe(100);
+    expect(e.searchItemLimitPerDay).toBe(999999);
     expect(e.optionsPerItem).toBe(10);
     expect(e.canSaveLists).toBe(true);
     expect(e.canTrackBought).toBe(true);

@@ -172,7 +172,7 @@ export default function Dashboard() {
         body: JSON.stringify({
           items,
           dietModes,
-          limitPerItem: isPaid ? 10 : 5
+          limitPerItem: 10
         })
       });
       const data = (await response.json()) as SearchProductsResponse & { error?: string };
