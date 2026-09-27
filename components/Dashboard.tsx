@@ -1026,7 +1026,11 @@ function ProductCard({
           {product.title}
         </p>
         <p className="mt-0.5 text-[11px] font-medium text-[#86868B] truncate">
-          {product.seller ?? product.brand ?? "Grocery item"}
+          {product.provider === "serpapi_google_shopping"
+            ? `Google Shopping • ${product.seller ?? "Retailer"}`
+            : product.provider === "open_prices"
+            ? "Open Prices (Crowdsourced)"
+            : product.seller ?? product.brand ?? "Grocery item"}
         </p>
 
         {/* Price & Price per serving */}

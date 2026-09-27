@@ -34,7 +34,8 @@ export async function POST(request: Request) {
 
     const settled = await Promise.allSettled(
       items.map(async (item) => {
-        const candidates = await searchGoogleShoppingProducts(item, Math.max(limit, 10), zipCode);
+        const rawCandidates = await searchGoogleShoppingProducts(item, Math.max(limit, 15), zipCode);
+        const candidates = deduplicateCandidates(rawCandidates);
         const healthEntries = await Promise.all(
           candidates.map(async (candidate) => {
             let health: HealthInfo = UNKNOWN_HEALTH;
@@ -94,4 +95,30 @@ async function enforceDailyLimit(userId: string, itemCount: number, limit: numbe
   if (count !== null && count > limit) {
     throw new ApiError(`Daily search limit reached. Paid users get higher limits.`, 402);
   }
+}
+
+function deduplicateCandidates(candidates: Array<import("@/lib/types").ProductCandidate>) {
+  const seen = new Map<string, import("@/lib/types").ProductCandidate>();
+
+  for (const candidate of candidates) {
+    const normTitle = candidate.title
+      .toLowerCase()
+      .replace(/[^\w\s]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!seen.has(normTitle)) {
+      seen.set(normTitle, candidate);
+    } else {
+      const existing = seen.get(normTitle)!;
+      if (
+        candidate.estimatedPrice !== null &&
+        (existing.estimatedPrice === null || candidate.estimatedPrice < existing.estimatedPrice)
+      ) {
+        seen.set(normTitle, candidate);
+      }
+    }
+  }
+
+  return Array.from(seen.values());
 }
