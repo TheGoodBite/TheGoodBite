@@ -168,31 +168,50 @@ export function ProductDetail({
         aria-labelledby={`${id}-${tab}`}
         tabIndex={0}
       >
-        {tab === "Nutrition" && (
-          <>
-            <p className="facts-heading">
-              <strong>Key facts</strong>
-              <span>per 100g</span>
-            </p>
-            {facts.map(({ label, value, unit, icon: Icon }) => (
-              <div className="nutrition-row" key={label}>
-                <Icon size={17} />
-                <span>{label}</span>
-                <strong>
-                  {value == null
-                    ? "Unknown"
-                    : `${Number(value.toFixed(1))}${unit === "kcal" ? " " : ""}${unit}`}
-                </strong>
-              </div>
-            ))}
-            <p className="fine-print">
-              {health.servingSize
-                ? `Serving size: ${health.servingSize}. `
-                : ""}
-              Missing values are unknown, not zero.
-            </p>
-          </>
-        )}
+        {tab === "Nutrition" &&
+          (facts.every((fact) => fact.value == null) ? (
+            <div className="notice">
+              <h3>
+                {health.availability === "unavailable"
+                  ? "Nutrition lookup unavailable"
+                  : "No verified nutrition match yet"}
+              </h3>
+              <p>
+                {health.availability === "unavailable"
+                  ? "The nutrition service could not complete this lookup. Try searching again shortly."
+                  : "We found this shopping listing, but could not verify its nutrition facts. Check the product label or retailer listing for details."}
+              </p>
+              {product.productUrl && (
+                <a href={product.productUrl} target="_blank" rel="noreferrer">
+                  View retailer listing <ExternalLink size={14} />
+                </a>
+              )}
+            </div>
+          ) : (
+            <>
+              <p className="facts-heading">
+                <strong>Key facts</strong>
+                <span>per 100g</span>
+              </p>
+              {facts.map(({ label, value, unit, icon: Icon }) => (
+                <div className="nutrition-row" key={label}>
+                  <Icon size={17} />
+                  <span>{label}</span>
+                  <strong>
+                    {value == null
+                      ? "Unknown"
+                      : `${Number(value.toFixed(1))}${unit === "kcal" ? " " : ""}${unit}`}
+                  </strong>
+                </div>
+              ))}
+              <p className="fine-print">
+                {health.servingSize
+                  ? `Serving size: ${health.servingSize}. `
+                  : ""}
+                Missing values are unknown, not zero.
+              </p>
+            </>
+          ))}
         {tab === "Ingredients" && (
           <>
             <h3>What’s inside</h3>

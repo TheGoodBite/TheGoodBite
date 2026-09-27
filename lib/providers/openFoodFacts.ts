@@ -39,6 +39,22 @@ const unknown = (availability: "no_match" | "unavailable"): HealthInfo => ({
   availability,
 });
 
+// Normalize spelling and plural forms, never flavors, fat percentages, or ingredient claims.
+function nutritionTokens(title: string) {
+  return [
+    ...new Set(
+      productTokens(title).map(
+        (token) =>
+          ({
+            yoghurts: "yogurt",
+            yoghurt: "yogurt",
+            yogurts: "yogurt",
+            sausages: "sausage",
+          })[token] ?? token,
+      ),
+    ),
+  ].sort();
+}
 export function matchProduct(
   product: OffProduct,
   candidate: ProductCandidate,
@@ -49,7 +65,7 @@ export function matchProduct(
     !product.brands
   )
     return false;
-  const title = productTokens(candidate.title);
+  const title = nutritionTokens(candidate.title);
   const brands = product.brands.split(",").map((b) => words(b));
   const brand = brands.find(
     (tokens) => tokens.length && tokens.every((t) => title.includes(t)),
@@ -63,7 +79,7 @@ export function matchProduct(
   )
     return false;
   const wanted = title.filter((t) => !brand.includes(t));
-  const actual = productTokens(product.product_name).filter(
+  const actual = nutritionTokens(product.product_name).filter(
     (t) => !brand.includes(t),
   );
   // All variant words must agree, including fat percentages, flavors, sweeteners, and preparation.
@@ -196,29 +212,45 @@ export async function enrichProducts(
 }> {
   const warnings = new Set<string>();
   let catalog: OffProduct[] = [];
+  let catalogUnavailable = false;
   if (candidates.some((c) => !validBarcode(c.upc))) {
     try {
       signal?.throwIfAborted();
       catalog = await searchCatalog(query);
     } catch {
       signal?.throwIfAborted();
+      catalogUnavailable = true;
       warnings.add(
         "Nutrition lookup is temporarily unavailable for some products; no missing data has been inferred.",
       );
     }
   }
-  const pairs = await mapConcurrent(candidates, 3, async (candidate) => {
+  const pairs = await mapConcurrent(candidates, 3, async (candidate, index) => {
     signal?.throwIfAborted();
     let matched: OffProduct | undefined;
     let method: "barcode" | "text" = "text";
+    let lookupAvailable = !catalogUnavailable;
     try {
       if (validBarcode(candidate.upc)) {
         matched = (await getByBarcode(candidate.upc!)) ?? undefined;
         method = "barcode";
+        lookupAvailable = true;
       } else {
-        const matches = catalog.filter((product) =>
+        let matches = catalog.filter((product) =>
           matchProduct(product, candidate),
         );
+        // A broad category's first page often omits the exact brand. Recover only
+        // the first three candidates, sharing the same cache and global search budget.
+        if (!matches.length && index < 3) {
+          const targetedQuery = productTokens(candidate.title).join(" ");
+          if (normalizeQuery(targetedQuery) !== normalizeQuery(query)) {
+            const targeted = await searchCatalog(targetedQuery);
+            lookupAvailable = true;
+            matches = targeted.filter((product) =>
+              matchProduct(product, candidate),
+            );
+          }
+        }
         const sameSize = matches.filter((product) =>
           samePackage(
             candidate.package ?? parsePackage(candidate.title),
@@ -239,7 +271,7 @@ export async function enrichProducts(
         candidate,
         health: matched
           ? fromOffProduct(matched, method)
-          : unknown(warnings.size ? "unavailable" : "no_match"),
+          : unknown(lookupAvailable ? "no_match" : "unavailable"),
       };
     } catch {
       signal?.throwIfAborted();

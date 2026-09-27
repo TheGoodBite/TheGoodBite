@@ -14,7 +14,7 @@ Package parsing supports weight, volume, and multipacks. Ambiguous multiple meas
 
 ## Nutrition and preference evidence
 
-Open Food Facts uses one shared US catalog lookup per grocery query, not one text search per shopping result. Exact barcode lookup is preferred. Text matching requires brand and all variant words to agree; ambiguous matches stay unknown. A matching package can resolve a catalog barcode. There is no arbitrary first-result nutrition fallback.
+Open Food Facts uses one shared US catalog lookup per grocery query. Up to three unmatched leading candidates receive a cached, targeted lookup to recover products omitted from the broad first page; these share the same global budget. Exact barcode lookup is preferred. Text matching normalizes yogurt spelling and sausage plurals, then requires brand and all variant words to agree; ambiguous matches stay unknown. A matching package can resolve a catalog barcode. There is no arbitrary first-result nutrition fallback.
 
 Only explicit per-100g nutriments are mapped, including carbohydrates. Missing values stay missing. Product details expose the nutrition source and match method. The existing nutrition algorithm is not a calibrated category-relative score; the combined score is labeled Match score.
 

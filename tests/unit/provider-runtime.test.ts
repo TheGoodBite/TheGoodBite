@@ -57,7 +57,7 @@ describe("cache and budgets", () => {
       "not configured",
     );
   });
-  it("uses one US catalog query to enrich an entire grocery item", async () => {
+  it("uses one shared catalog query and bounds targeted recovery to top candidates", async () => {
     await isolatedCache();
     vi.stubEnv("NODE_ENV", "development");
     const fetcher = vi.fn(async (_input: RequestInfo | URL) =>
@@ -84,7 +84,14 @@ describe("cache and budgets", () => {
       estimatedPrice: 3,
     }));
     const result = await enrichProducts(candidates, "Greek yogurt");
-    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(
+      fetcher.mock.calls.filter(
+        (call) =>
+          new URL(String(call[0])).searchParams.get("search_terms") ===
+          "Greek yogurt",
+      ),
+    ).toHaveLength(1);
     expect(result.healthById.get("0")?.source?.productName).toBe(
       "Plain Greek Yogurt",
     );
@@ -147,4 +154,41 @@ describe("cache and budgets", () => {
       expect(result.warnings).toEqual([]);
     },
   );
+  it("recovers an exact product omitted from the broad catalog page", async () => {
+    await isolatedCache();
+    vi.stubEnv("NODE_ENV", "development");
+    const fetcher = vi.fn(async (input: RequestInfo | URL) =>
+      Response.json({
+        products:
+          new URL(String(input)).searchParams.get("search_terms") ===
+          "chicken sausage"
+            ? []
+            : [
+                {
+                  code: "012345678905",
+                  brands: "Boar's Head",
+                  product_name: "Robust Italian Chicken Sausage",
+                  countries_tags: ["en:united-states"],
+                  nutriments: { proteins_100g: 18 },
+                },
+              ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const { enrichProducts } = await import("@/lib/providers/openFoodFacts");
+    const result = await enrichProducts(
+      [
+        {
+          provider: "test",
+          providerProductId: "a",
+          title: "Boar's Head Chicken Sausage Robust Italian",
+          estimatedPrice: 5,
+        },
+      ],
+      "chicken sausage",
+    );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.healthById.get("a")?.nutrition.protein100g).toBe(18);
+    expect(result.healthById.get("a")?.source?.match).toBe("text");
+  });
 });
