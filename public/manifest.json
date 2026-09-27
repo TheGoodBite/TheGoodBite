@@ -1,6 +1,6 @@
 {
-  "name": "OnlyGoodBites",
-  "short_name": "GoodBites",
+  "name": "The Good Bite",
+  "short_name": "TheGoodBite",
   "description": "Ranked grocery product discovery with nutrition and diet-fit scores.",
   "start_url": "/",
   "display": "standalone",

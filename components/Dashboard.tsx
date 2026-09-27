@@ -7,11 +7,13 @@ import {
   ChevronRight,
   Crown,
   ExternalLink,
-  Leaf,
+  Info,
   Loader2,
   LogOut,
+  MapPin,
   Plus,
   Search,
+  ShieldAlert,
   ShieldCheck,
   ShoppingBasket,
   Sparkles,
@@ -21,11 +23,15 @@ import {
   Zap
 } from "lucide-react";
 import type { AuthChangeEvent, Session, SupabaseClient } from "@supabase/supabase-js";
+import { ALLERGENS, DIET_MODES, type Allergen, type DietMode, type RankedProduct, type SearchProductsResponse } from "@/lib/types";
+import { ALLERGEN_DETAILS, checkAllergens } from "@/lib/allergens";
+import { computePricePerServing } from "@/lib/pricing";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
-import { DIET_MODES, type DietMode, type RankedProduct, type SearchProductsResponse } from "@/lib/types";
+import { extractTags } from "@/lib/tags";
 import { cn, uniqueStrings } from "@/lib/utils";
 
 import { BroccoliBiteLogo } from "@/components/BroccoliBiteLogo";
+import { ProductDetailModal } from "@/components/ProductDetailModal";
 
 type ResultItem = SearchProductsResponse["items"][number];
 type ListRecord = {
@@ -44,7 +50,8 @@ const DIET_LABELS: Record<DietMode, string> = {
   gluten_free: "Gluten-free",
   heart_conscious: "Heart-conscious",
   weight_loss_friendly: "Weight-loss friendly",
-  kid_friendly: "Kid-friendly"
+  kid_friendly: "Kid-friendly",
+  fodmap: "FODMAP (Beta)"
 };
 
 const DIET_ICONS: Record<DietMode, string> = {
@@ -57,7 +64,8 @@ const DIET_ICONS: Record<DietMode, string> = {
   gluten_free: "🌾",
   heart_conscious: "❤️",
   weight_loss_friendly: "⚖️",
-  kid_friendly: "👶"
+  kid_friendly: "👶",
+  fodmap: "🌾"
 };
 
 export default function Dashboard() {
@@ -68,14 +76,19 @@ export default function Dashboard() {
   const [itemInput, setItemInput] = useState("");
   const [items, setItems] = useState(["mac and cheese", "potato chips", "greek yogurt"]);
   const [dietModes, setDietModes] = useState<DietMode[]>([]);
+  const [allergies, setAllergies] = useState<Allergen[]>([]);
+  const [zipCode, setZipCode] = useState<string>("");
+  const [quickMode, setQuickMode] = useState<boolean>(false);
+  const [quickQuery, setQuickQuery] = useState<string>("");
   const [results, setResults] = useState<ResultItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "info" | "success" | "error" } | null>(null);
-  const [isPaid, setIsPaid] = useState(false);
+  const [isPaid, setIsPaid] = useState(true);
   const [lists, setLists] = useState<ListRecord[]>([]);
   const [showLists, setShowLists] = useState(false);
   const [boughtIds, setBoughtIds] = useState<Set<string>>(new Set());
   const [showMagicLink, setShowMagicLink] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<RankedProduct | null>(null);
 
   const signedIn = demoMode || Boolean(session);
   const accessToken = demoMode ? "dev-token" : session?.access_token;
@@ -90,6 +103,33 @@ export default function Dashboard() {
 
     return () => data.subscription.unsubscribe();
   }, [supabase]);
+
+  // Restore saved preferences
+  useEffect(() => {
+    try {
+      const savedZip = localStorage.getItem("goodbite_zip");
+      if (savedZip) setZipCode(savedZip);
+      const savedAllergies = localStorage.getItem("goodbite_allergies");
+      if (savedAllergies) setAllergies(JSON.parse(savedAllergies));
+    } catch {}
+  }, []);
+
+  const handleZipChange = (newZip: string) => {
+    setZipCode(newZip);
+    try {
+      localStorage.setItem("goodbite_zip", newZip);
+    } catch {}
+  };
+
+  const toggleAllergen = (allergen: Allergen) => {
+    setAllergies((prev) => {
+      const next = prev.includes(allergen) ? prev.filter((a) => a !== allergen) : [...prev, allergen];
+      try {
+        localStorage.setItem("goodbite_allergies", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
 
   function notify(text: string, type: "info" | "success" | "error" = "info") {
     setMessage({ text, type });
@@ -121,7 +161,6 @@ export default function Dashboard() {
   async function signOut() {
     if (supabase) await supabase.auth.signOut();
     setSession(null);
-    setIsPaid(false);
     setResults([]);
     setBoughtIds(new Set());
   }
@@ -147,16 +186,18 @@ export default function Dashboard() {
   }
 
   function toggleDietMode(mode: DietMode) {
-    if (!isPaid) {
-      notify("Diet Mode Packs are included with the paid plan. Upgrade below!", "info");
-      return;
-    }
     setDietModes((current) => (current.includes(mode) ? current.filter((item) => item !== mode) : [...current, mode]));
   }
 
-  async function searchProducts() {
+  async function searchProducts(overrideItems?: string[]) {
     if (!signedIn || !accessToken) {
       notify("Sign in to search product options.", "error");
+      return;
+    }
+
+    const searchItems = overrideItems ?? (quickMode ? [quickQuery.trim()] : items);
+    if (searchItems.length === 0 || searchItems.every((i) => !i)) {
+      notify("Enter at least one item to search.", "info");
       return;
     }
 
@@ -170,8 +211,10 @@ export default function Dashboard() {
           authorization: `Bearer ${accessToken}`
         },
         body: JSON.stringify({
-          items,
+          items: searchItems,
           dietModes,
+          allergies,
+          zipCode: zipCode.length === 5 ? zipCode : undefined,
           limitPerItem: 10
         })
       });
@@ -180,27 +223,11 @@ export default function Dashboard() {
 
       setResults(data.items);
       setIsPaid(data.entitlement.isPaid);
-      if (!data.entitlement.isPaid && dietModes.length > 0) {
-        setDietModes([]);
-        notify("Diet modes are paid-only and were ignored for this search.", "info");
-      }
     } catch (error) {
       notify(error instanceof Error ? error.message : "Search failed.", "error");
     } finally {
       setIsSearching(false);
     }
-  }
-
-  async function upgrade(interval: "monthly" | "yearly") {
-    if (!accessToken) return;
-    const response = await fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ interval })
-    });
-    const data = (await response.json()) as { url?: string; error?: string };
-    if (data.url) window.location.href = data.url;
-    else notify(data.error ?? "Checkout is not configured yet.", "error");
   }
 
   async function saveCurrentList() {
@@ -212,7 +239,7 @@ export default function Dashboard() {
     });
     const data = (await response.json()) as { error?: string };
     if (!response.ok) {
-      notify(data.error ?? "Saved lists are a paid feature.", "error");
+      notify(data.error ?? "Saved lists error.", "error");
       return;
     }
     notify("List saved successfully!", "success");
@@ -226,7 +253,7 @@ export default function Dashboard() {
     });
     const data = (await response.json()) as { lists?: ListRecord[]; error?: string };
     if (!response.ok) {
-      notify(data.error ?? "Saved lists are a paid feature.", "error");
+      notify(data.error ?? "Saved lists error.", "error");
       return;
     }
     setLists(data.lists ?? []);
@@ -235,10 +262,6 @@ export default function Dashboard() {
 
   async function markBought(query: string, product: RankedProduct) {
     if (!accessToken) return;
-    if (!isPaid) {
-      notify("Bought history is a paid feature. Upgrade to track what you buy!", "info");
-      return;
-    }
     const response = await fetch("/api/bought-products", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
@@ -266,42 +289,52 @@ export default function Dashboard() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-10">
+    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-10 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <div className="mx-auto max-w-7xl">
 
         {/* ── Apple-inspired Glass Header ── */}
-        <header className="sticky top-0 z-40 relative flex flex-col gap-4 overflow-hidden rounded-[2rem] border border-black/[0.05] apple-glass p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+        <header className="sticky top-0 z-40 relative flex flex-col gap-4 overflow-hidden rounded-[2rem] border border-black/[0.06] dark:border-white/10 apple-glass p-4 shadow-sm md:flex-row md:items-center md:justify-between">
           <div className="relative flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-black text-white shadow-sm">
+            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-700 text-white shadow-md shadow-emerald-700/20">
               <BroccoliBiteLogo className="h-7 w-7 text-white" />
             </div>
             <div>
-              <p className="flex items-center gap-1.5 text-xs font-bold tracking-tight text-[#86868B]">
-                OnlyGoodBites
+              <p className="flex items-center gap-1.5 text-xs font-bold tracking-tight text-emerald-700 dark:text-emerald-400">
+                The Good Bite
               </p>
-              <h1 className="font-heading text-2xl font-bold tracking-tight text-[#1D1D1F] sm:text-3xl">
-                Smarter Grocery Picks
+              <h1 className="font-heading text-xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-2xl">
+                Healthy picks, honest prices.
               </h1>
             </div>
           </div>
 
+          {/* Controls & Mode Toggles */}
           <div className="relative flex flex-wrap items-center gap-2">
+            {/* Quick Lookup vs List Mode Toggle */}
+            <button
+              onClick={() => setQuickMode(!quickMode)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold transition-all border",
+                quickMode
+                  ? "bg-emerald-600 text-white border-emerald-500 shadow-sm"
+                  : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100"
+              )}
+            >
+              <Zap className="h-3.5 w-3.5" />
+              <span>{quickMode ? "Quick Mode" : "Grocery List"}</span>
+            </button>
+
             {signedIn ? (
               <>
-                <span className="flex items-center gap-1.5 rounded-full bg-[#F5F5F7] px-3.5 py-2 text-xs font-semibold text-[#1D1D1F] border border-black/[0.04]">
+                <span className="flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-black/[0.04]">
                   {demoMode ? (
-                    <><Zap className="h-3.5 w-3.5 text-amber-500" /> Demo mode</>
+                    <><Sparkles className="h-3.5 w-3.5 text-emerald-500" /> Free Tier</>
                   ) : (
-                    <><Check className="h-3.5 w-3.5 text-[#34C759]" /> {session?.user.email}</>
+                    <><Check className="h-3.5 w-3.5 text-emerald-500" /> {session?.user.email}</>
                   )}
                 </span>
-                {isPaid && (
-                  <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 px-3 py-1.5 text-xs font-black text-amber-950 shadow-sm">
-                    <Crown className="h-3.5 w-3.5" /> Paid
-                  </span>
-                )}
                 <button
-                  className="flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-[#F5F5F7] px-3.5 py-2 text-xs font-semibold text-[#1D1D1F] transition hover:bg-black hover:text-white"
+                  className="flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition hover:bg-black hover:text-white"
                   onClick={signOut}
                   id="sign-out-btn"
                 >
@@ -341,134 +374,205 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── Main layout ── */}
-        <section className="mt-6 grid gap-5 lg:grid-cols-[400px_1fr]">
+        {/* ── Allergy Mandatory Disclaimer Banner (if any allergy selected) ── */}
+        {allergies.length > 0 && (
+          <div className="mt-4 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex items-start gap-3 text-amber-900 dark:text-amber-200 text-xs">
+            <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold">⚠️ Allergy Safety Disclaimer: </span>
+              Allergy information is derived automatically from product datasets for general guidance only.
+              Always inspect physical product packaging and labels before consuming.
+            </div>
+          </div>
+        )}
 
-          {/* ── Sidebar: Grocery list editor + diet modes ── */}
+        {/* ── Main layout ── */}
+        <section className="mt-6 grid gap-5 lg:grid-cols-[380px_1fr]">
+
+          {/* ── Sidebar: Grocery list editor + preferences + diet modes ── */}
           <aside className="h-fit space-y-4">
 
-            {/* List editor card */}
-            <div className="rounded-[2rem] border border-stone-200/80 bg-white/90 p-5 shadow-sm shadow-stone-900/5 backdrop-blur-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-black text-stone-950">Grocery list</h2>
-                  <p className="mt-0.5 text-xs font-medium text-stone-500">
-                    Add items one by one, or paste a comma/newline separated list.
-                  </p>
+            {/* Location / ZIP Code Card */}
+            <div className="rounded-[2rem] border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 p-4 shadow-sm backdrop-blur-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100">Store ZIP Code (Optional)</span>
                 </div>
-                <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-700">
-                  {items.length} item{items.length !== 1 ? "s" : ""}
-                </span>
-              </div>
-
-              <div className="mt-4 flex gap-2">
-                <input
-                  id="grocery-item-input"
-                  value={itemInput}
-                  onChange={(event) => setItemInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") addItems(itemInput);
-                  }}
-                  placeholder="e.g. mac and cheese, chips…"
-                  className="min-w-0 flex-1 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-semibold text-stone-900 placeholder:text-stone-400 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                />
-                <button
-                  id="add-item-btn"
-                  className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-300/40 transition hover:from-emerald-600 hover:to-emerald-800 active:scale-95"
-                  onClick={() => addItems(itemInput)}
-                  aria-label="Add grocery item"
-                >
-                  <Plus className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="mt-3 space-y-1.5">
-                {items.length === 0 && (
-                  <p className="rounded-2xl bg-stone-50 px-4 py-3 text-center text-xs font-semibold text-stone-400">
-                    Add your first grocery item above
-                  </p>
+                {zipCode.length === 5 && (
+                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                    📍 {zipCode}
+                  </span>
                 )}
-                {items.map((item, index) => (
-                  <div
-                    key={`${item}-${index}`}
-                    className="group flex items-center gap-1.5 rounded-2xl bg-stone-50 p-2 transition hover:bg-emerald-50/50"
-                  >
-                    <span className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-200 text-xs font-black text-stone-600">
-                      {index + 1}
-                    </span>
-                    <span className="flex-1 truncate px-1 text-sm font-bold capitalize text-stone-800">{item}</span>
-                    <button
-                      className="rounded-full p-1.5 text-stone-400 transition hover:bg-white hover:text-stone-700"
-                      onClick={() => moveItem(index, -1)}
-                      aria-label="Move up"
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      className="rounded-full p-1.5 text-stone-400 transition hover:bg-white hover:text-stone-700"
-                      onClick={() => moveItem(index, 1)}
-                      aria-label="Move down"
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      className="rounded-full p-1.5 text-stone-300 transition hover:bg-red-50 hover:text-red-500"
-                      onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                      aria-label="Remove item"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
               </div>
-
-              {/* Actions */}
-              <div className="mt-5 grid gap-2">
-                <button
-                  id="search-btn"
-                  className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-stone-900 to-stone-800 px-4 py-3.5 font-black text-white shadow-md transition hover:from-stone-800 hover:to-stone-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={searchProducts}
-                  disabled={isSearching || !signedIn || items.length === 0}
-                >
-                  {isSearching ? (
-                    <><Loader2 className="h-5 w-5 animate-spin" /> Searching…</>
-                  ) : (
-                    <><Search className="h-5 w-5" /> Search products</>
-                  )}
-                </button>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    id="save-list-btn"
-                    className="flex items-center justify-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-bold text-stone-700 transition hover:bg-stone-50 hover:border-stone-300"
-                    onClick={saveCurrentList}
-                    disabled={!signedIn}
-                  >
-                    Save list
-                  </button>
-                  <button
-                    id="saved-lists-btn"
-                    className="flex items-center justify-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-bold text-stone-700 transition hover:bg-stone-50 hover:border-stone-300"
-                    onClick={loadLists}
-                    disabled={!signedIn}
-                  >
-                    Saved lists
-                  </button>
-                </div>
+              <div className="mt-2.5 flex items-center gap-2">
+                <input
+                  type="text"
+                  maxLength={5}
+                  value={zipCode}
+                  onChange={(e) => handleZipChange(e.target.value.replace(/\D/g, ""))}
+                  placeholder="e.g. 10001 (USA)"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-emerald-500"
+                />
               </div>
             </div>
 
-            {/* Diet mode card */}
-            <div className="rounded-[2rem] border border-stone-200/80 bg-white/90 p-5 shadow-sm backdrop-blur-sm">
-              <div className="mb-3 flex items-center justify-between">
-                <div>
-                  <h3 className="font-black text-stone-950">Diet Mode Packs</h3>
-                  <p className="text-xs font-medium text-stone-500 mt-0.5">General food-preference filters · not medical advice.</p>
-                </div>
-                {!isPaid && (
-                  <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-300 to-yellow-400 px-2.5 py-1 text-xs font-black text-amber-950">
-                    <Crown className="h-3 w-3" /> Paid
+            {/* List Editor Card (or Quick Mode indicator) */}
+            {!quickMode ? (
+              <div className="rounded-[2rem] border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 p-5 shadow-sm backdrop-blur-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-950 dark:text-white">Grocery list</h2>
+                    <p className="mt-0.5 text-xs font-medium text-slate-500">
+                      Add items one by one, or paste a list.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs font-black text-slate-700 dark:text-slate-300">
+                    {items.length} item{items.length !== 1 ? "s" : ""}
                   </span>
-                )}
+                </div>
+
+                <div className="mt-4 flex gap-2">
+                  <input
+                    id="grocery-item-input"
+                    value={itemInput}
+                    onChange={(event) => setItemInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") addItems(itemInput);
+                    }}
+                    placeholder="e.g. mac and cheese, chips…"
+                    className="min-w-0 flex-1 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                  <button
+                    id="add-item-btn"
+                    className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/30 transition active:scale-95"
+                    onClick={() => addItems(itemInput)}
+                    aria-label="Add grocery item"
+                  >
+                    <Plus className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="mt-3 space-y-1.5">
+                  {items.length === 0 && (
+                    <p className="rounded-2xl bg-slate-50 dark:bg-slate-800 px-4 py-3 text-center text-xs font-semibold text-slate-400">
+                      Add your first grocery item above
+                    </p>
+                  )}
+                  {items.map((item, index) => (
+                    <div
+                      key={`${item}-${index}`}
+                      className="group flex items-center gap-1.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-2 transition hover:bg-emerald-50/50"
+                    >
+                      <span className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-700 text-xs font-black text-slate-600 dark:text-slate-300">
+                        {index + 1}
+                      </span>
+                      <span className="flex-1 truncate px-1 text-sm font-bold capitalize text-slate-800 dark:text-slate-200">{item}</span>
+                      <button
+                        className="rounded-full p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700"
+                        onClick={() => moveItem(index, -1)}
+                        aria-label="Move up"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        className="rounded-full p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700"
+                        onClick={() => moveItem(index, 1)}
+                        aria-label="Move down"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        className="rounded-full p-1.5 text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                        onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                        aria-label="Remove item"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Actions */}
+                <div className="mt-5 grid gap-2">
+                  <button
+                    id="search-btn"
+                    className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 px-4 py-3.5 font-black text-white shadow-md transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={() => searchProducts()}
+                    disabled={isSearching || !signedIn || items.length === 0}
+                  >
+                    {isSearching ? (
+                      <><Loader2 className="h-5 w-5 animate-spin" /> Searching…</>
+                    ) : (
+                      <><Search className="h-5 w-5" /> Search products</>
+                    )}
+                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      id="save-list-btn"
+                      className="flex items-center justify-center gap-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm font-bold text-slate-700 dark:text-slate-200 transition hover:bg-slate-50"
+                      onClick={saveCurrentList}
+                      disabled={!signedIn}
+                    >
+                      Save list
+                    </button>
+                    <button
+                      id="saved-lists-btn"
+                      className="flex items-center justify-center gap-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm font-bold text-slate-700 dark:text-slate-200 transition hover:bg-slate-50"
+                      onClick={loadLists}
+                      disabled={!signedIn}
+                    >
+                      Saved lists
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-[2rem] border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 p-5 shadow-sm">
+                <h3 className="font-bold text-emerald-900 dark:text-emerald-300 text-sm flex items-center gap-1.5">
+                  <Zap className="w-4 h-4 text-emerald-600" />
+                  <span>Quick Lookup Mode Active</span>
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                  Type any food item in the single search bar on the right for instant ranking.
+                </p>
+              </div>
+            )}
+
+            {/* Allergen Filters Card */}
+            <div className="rounded-[2rem] border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 p-5 shadow-sm backdrop-blur-sm">
+              <div className="mb-3">
+                <h3 className="font-black text-slate-950 dark:text-white text-sm">Allergy Filters</h3>
+                <p className="text-xs font-medium text-slate-500 mt-0.5">Penalizes products containing selected allergens.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {ALLERGENS.map((allergen) => {
+                  const info = ALLERGEN_DETAILS[allergen];
+                  const active = allergies.includes(allergen);
+                  return (
+                    <button
+                      key={allergen}
+                      onClick={() => toggleAllergen(allergen)}
+                      className={cn(
+                        "flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border transition",
+                        active
+                          ? "bg-rose-600 text-white border-rose-600 shadow-sm"
+                          : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
+                      )}
+                    >
+                      <span>{info.icon}</span>
+                      <span>{info.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Diet Mode Card */}
+            <div className="rounded-[2rem] border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 p-5 shadow-sm backdrop-blur-sm">
+              <div className="mb-3">
+                <h3 className="font-black text-slate-950 dark:text-white text-sm">Diet Modes & Packs</h3>
+                <p className="text-xs font-medium text-slate-500 mt-0.5">Filter by nutritional goals or diets.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {DIET_MODES.map((mode) => (
@@ -480,38 +584,73 @@ export default function Dashboard() {
                       "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition",
                       dietModes.includes(mode)
                         ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
-                        : "border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50",
-                      !isPaid && "cursor-not-allowed opacity-60"
+                        : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300 hover:bg-slate-50"
                     )}
                   >
                     <span>{DIET_ICONS[mode]}</span>
-                    {DIET_LABELS[mode]}
+                    <span>{DIET_LABELS[mode]}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Upgrade card for free users */}
-            {!isPaid && signedIn && <UpgradeCard upgrade={upgrade} />}
           </aside>
 
           {/* ── Results area ── */}
           <section className="min-w-0 space-y-5">
+            {/* Single Quick Lookup Search Bar when in Quick Mode */}
+            {quickMode && (
+              <div className="rounded-[2rem] border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-900 p-4 shadow-md">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (quickQuery.trim()) searchProducts([quickQuery.trim()]);
+                  }}
+                  className="flex gap-2"
+                >
+                  <div className="relative flex-1">
+                    <Search className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={quickQuery}
+                      onChange={(e) => setQuickQuery(e.target.value)}
+                      placeholder="Quick search any grocery product (e.g. 'almond milk', 'greek yogurt')..."
+                      className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-11 pr-4 py-3 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSearching || !quickQuery.trim()}
+                    className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition disabled:opacity-50"
+                  >
+                    {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : "Search"}
+                  </button>
+                </form>
+              </div>
+            )}
+
             {!signedIn ? (
               <SignInPrompt signInWithGoogle={signInWithGoogle} supabase={supabase} showMagicLink={showMagicLink} setShowMagicLink={setShowMagicLink} email={email} setEmail={setEmail} sendMagicLink={sendMagicLink} />
             ) : results.length === 0 ? (
-              <EmptyState isSearching={isSearching} itemCount={items.length} />
+              <EmptyState isSearching={isSearching} itemCount={quickMode ? 1 : items.length} />
             ) : (
               results.map((item, i) => (
                 <div key={item.query} className="fade-in" style={{ animationDelay: `${i * 60}ms` }}>
-                  <ProductCarousel item={item} isPaid={isPaid} markBought={markBought} boughtIds={boughtIds} />
+                  <ProductCarousel
+                    item={item}
+                    isPaid={isPaid}
+                    markBought={markBought}
+                    boughtIds={boughtIds}
+                    selectedAllergies={allergies}
+                    onSelectProduct={setSelectedProduct}
+                  />
                 </div>
               ))
             )}
 
             {/* Disclaimer */}
             {results.length > 0 && (
-              <p className="px-2 text-xs font-medium text-stone-400">
+              <p className="px-2 text-xs font-medium text-slate-400">
                 Prices are estimates from shopping results, not confirmed local shelf prices.
                 Open Food Facts data may have gaps; nutrition signals are informational only.
               </p>
@@ -519,20 +658,31 @@ export default function Dashboard() {
           </section>
         </section>
 
+        {/* ── Yuka-Style Expanded Detail Modal ── */}
+        <ProductDetailModal
+          product={selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+          isBought={selectedProduct ? boughtIds.has(selectedProduct.providerProductId) : false}
+          onToggleBought={(id) => {
+            if (selectedProduct) markBought(selectedProduct.title, selectedProduct);
+          }}
+          selectedAllergies={allergies}
+        />
+
         {/* ── Saved lists drawer ── */}
         {showLists && (
           <div
-            className="fixed inset-0 z-20 bg-stone-950/40 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-50 bg-slate-950/40 p-4 backdrop-blur-sm"
             onClick={() => setShowLists(false)}
           >
             <div
-              className="ml-auto h-full max-w-sm overflow-auto rounded-[2rem] bg-white p-5 shadow-2xl"
+              className="ml-auto h-full max-w-sm overflow-auto rounded-[2rem] bg-white dark:bg-slate-900 p-5 shadow-2xl"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black">Saved lists</h2>
+                <h2 className="text-xl font-black text-slate-900 dark:text-white">Saved lists</h2>
                 <button
-                  className="rounded-full bg-stone-100 p-2 text-stone-600 transition hover:bg-stone-200"
+                  className="rounded-full bg-slate-100 dark:bg-slate-800 p-2 text-slate-600 dark:text-slate-300 transition hover:bg-slate-200"
                   onClick={() => setShowLists(false)}
                   aria-label="Close saved lists"
                 >
@@ -541,14 +691,14 @@ export default function Dashboard() {
               </div>
               <div className="mt-4 space-y-2">
                 {lists.length === 0 ? (
-                  <p className="rounded-2xl bg-stone-50 p-4 text-center text-sm font-semibold text-stone-400">
+                  <p className="rounded-2xl bg-slate-50 dark:bg-slate-800 p-4 text-center text-sm font-semibold text-slate-400">
                     No saved lists yet. Save your first list!
                   </p>
                 ) : (
                   lists.map((list) => (
                     <button
                       key={list.id}
-                      className="w-full rounded-2xl border border-stone-200 bg-stone-50 p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50/50"
+                      className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50/50"
                       onClick={() => {
                         const nextItems =
                           list.grocery_list_items
@@ -560,8 +710,8 @@ export default function Dashboard() {
                         notify(`Loaded list: ${list.name}`, "success");
                       }}
                     >
-                      <div className="font-black text-stone-900">{list.name}</div>
-                      <div className="mt-1 text-xs font-semibold text-stone-500">
+                      <div className="font-black text-slate-900 dark:text-white">{list.name}</div>
+                      <div className="mt-1 text-xs font-semibold text-slate-500">
                         {list.grocery_list_items?.length ?? 0} item{(list.grocery_list_items?.length ?? 0) !== 1 ? "s" : ""}
                       </div>
                     </button>
@@ -587,26 +737,26 @@ function AuthControls(props: {
   setShowMagicLink: (v: boolean) => void;
 }) {
   if (!props.supabase) {
-    return <span className="rounded-full bg-blue-50 px-3.5 py-2 text-sm font-bold text-blue-800 ring-1 ring-blue-200">Demo auth active</span>;
+    return <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-3.5 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-200">Demo active</span>;
   }
 
   return (
     <div className="flex flex-col gap-2 sm:flex-row">
       <button
         id="google-sign-in-btn"
-        className="flex items-center gap-2 rounded-full bg-stone-950 px-4 py-2 text-sm font-black text-white transition hover:bg-stone-800"
+        className="flex items-center gap-2 rounded-full bg-slate-950 dark:bg-white px-4 py-2 text-xs font-black text-white dark:text-slate-950 transition hover:bg-slate-800"
         onClick={props.signInWithGoogle}
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24">
-          <path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-          <path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-          <path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-          <path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
         </svg>
         Sign in with Google
       </button>
       <button
-        className="flex items-center gap-1.5 rounded-full border border-stone-200 px-3.5 py-2 text-sm font-bold text-stone-600 transition hover:bg-stone-50"
+        className="flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-700 px-3.5 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 transition hover:bg-slate-50"
         onClick={() => props.setShowMagicLink(!props.showMagicLink)}
       >
         Email link
@@ -620,11 +770,11 @@ function AuthControls(props: {
             onKeyDown={(e) => { if (e.key === "Enter") props.sendMagicLink(); }}
             placeholder="you@example.com"
             type="email"
-            className="w-44 rounded-full border border-stone-200 px-3.5 py-2 text-sm font-semibold outline-none focus:border-emerald-500"
+            className="w-44 rounded-full border border-slate-200 px-3.5 py-2 text-xs font-semibold outline-none focus:border-emerald-500"
           />
           <button
             id="send-magic-link-btn"
-            className="rounded-full bg-stone-100 px-3.5 py-2 text-sm font-black text-stone-700 transition hover:bg-stone-200"
+            className="rounded-full bg-slate-100 px-3.5 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-200"
             onClick={props.sendMagicLink}
           >
             Send
@@ -646,33 +796,33 @@ function SignInPrompt(props: {
   sendMagicLink: () => void;
 }) {
   return (
-    <div className="grid min-h-[32rem] place-items-center rounded-[2rem] border border-emerald-100 bg-gradient-to-br from-white/80 to-emerald-50/60 p-8 text-center shadow-sm backdrop-blur-sm">
+    <div className="grid min-h-[32rem] place-items-center rounded-[2rem] border border-emerald-100 dark:border-emerald-900 bg-gradient-to-br from-white to-emerald-50/60 dark:from-slate-900 dark:to-slate-950 p-8 text-center shadow-sm backdrop-blur-sm">
       <div className="max-w-md">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-400 to-emerald-700 text-white shadow-xl shadow-emerald-300/50">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-600 text-white shadow-xl shadow-emerald-600/30">
           <ShoppingBasket className="h-10 w-10" />
         </div>
-        <h2 className="mt-6 text-3xl font-black text-stone-950">Make smarter grocery choices</h2>
-        <p className="mx-auto mt-3 max-w-sm font-semibold text-stone-500">
-          Sign in to search grocery items and get ranked product carousels with nutrition scores, estimated prices, and diet-fit ratings.
+        <h2 className="mt-6 text-3xl font-black text-slate-950 dark:text-white">Make healthier grocery choices</h2>
+        <p className="mx-auto mt-3 max-w-sm font-semibold text-slate-500 dark:text-slate-400">
+          Enter your grocery list to get ranked healthy product options with estimated prices, diet fit, and Yuka-style nutrition signals.
         </p>
         <div className="mt-8 flex flex-col items-center gap-3">
           {props.supabase ? (
             <>
               <button
                 id="hero-google-sign-in-btn"
-                className="flex w-full max-w-xs items-center justify-center gap-2.5 rounded-2xl bg-stone-950 px-6 py-3.5 font-black text-white shadow-md transition hover:bg-stone-800 active:scale-[0.98]"
+                className="flex w-full max-w-xs items-center justify-center gap-2.5 rounded-2xl bg-slate-950 dark:bg-white px-6 py-3.5 font-black text-white dark:text-slate-950 shadow-md transition hover:bg-slate-800 active:scale-[0.98]"
                 onClick={props.signInWithGoogle}
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24">
-                  <path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                  <path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
                 Continue with Google
               </button>
               <button
-                className="text-sm font-semibold text-stone-500 underline-offset-2 hover:text-stone-700 hover:underline"
+                className="text-xs font-semibold text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline"
                 onClick={() => props.setShowMagicLink(!props.showMagicLink)}
               >
                 Sign in with email link instead
@@ -685,10 +835,10 @@ function SignInPrompt(props: {
                     onKeyDown={(e) => { if (e.key === "Enter") props.sendMagicLink(); }}
                     placeholder="you@example.com"
                     type="email"
-                    className="min-w-0 flex-1 rounded-2xl border border-stone-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500"
+                    className="min-w-0 flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-xs font-semibold outline-none focus:border-emerald-500"
                   />
                   <button
-                    className="rounded-2xl bg-stone-100 px-4 py-3 text-sm font-black text-stone-700 hover:bg-stone-200"
+                    className="rounded-2xl bg-slate-100 px-4 py-3 text-xs font-black text-slate-700 hover:bg-slate-200"
                     onClick={props.sendMagicLink}
                   >
                     Send
@@ -697,18 +847,18 @@ function SignInPrompt(props: {
               )}
             </>
           ) : (
-            <p className="rounded-2xl bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700">
-              Demo mode active — Supabase not configured. Search is available.
+            <p className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 px-4 py-3 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+              Demo mode active — Search is fully available.
             </p>
           )}
         </div>
-        <div className="mt-8 grid grid-cols-3 gap-4 border-t border-stone-100 pt-6 text-center">
+        <div className="mt-8 grid grid-cols-3 gap-4 border-t border-slate-100 dark:border-slate-800 pt-6 text-center">
           {[
             { icon: "🥗", label: "Nutrition scores" },
-            { icon: "💰", label: "Price estimates" },
-            { icon: "📋", label: "Saved lists" }
+            { icon: "💰", label: "Price per serving" },
+            { icon: "🌾", label: "FODMAP & Allergies" }
           ].map((f) => (
-            <div key={f.label} className="text-sm font-semibold text-stone-500">
+            <div key={f.label} className="text-xs font-semibold text-slate-500">
               <div className="mb-1 text-2xl">{f.icon}</div>
               {f.label}
             </div>
@@ -719,61 +869,26 @@ function SignInPrompt(props: {
   );
 }
 
-/* ── Upgrade CTA card ── */
-function UpgradeCard({ upgrade }: { upgrade: (interval: "monthly" | "yearly") => void }) {
-  return (
-    <div className="overflow-hidden rounded-[2rem] border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50 p-5 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 text-amber-950 shadow-sm">
-          <Crown className="h-5 w-5" />
-        </div>
-        <div>
-          <div className="font-black text-amber-950">Upgrade for more</div>
-          <p className="mt-1 text-xs font-semibold leading-relaxed text-amber-800">
-            10 options per item · 100 daily searches · saved lists · bought history · Diet Mode Packs
-          </p>
-        </div>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <button
-          id="upgrade-monthly-btn"
-          className="rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 px-3 py-2.5 text-sm font-black text-amber-950 shadow-sm transition hover:from-amber-500 hover:to-yellow-600 active:scale-[0.97]"
-          onClick={() => upgrade("monthly")}
-        >
-          $3.99 / month
-        </button>
-        <button
-          id="upgrade-yearly-btn"
-          className="rounded-2xl border border-amber-200 bg-white px-3 py-2.5 text-sm font-black text-amber-900 transition hover:bg-amber-50"
-          onClick={() => upgrade("yearly")}
-        >
-          $19 / year
-        </button>
-      </div>
-    </div>
-  );
-}
-
 /* ── Empty state ── */
 function EmptyState({ isSearching, itemCount }: { isSearching: boolean; itemCount: number }) {
   return (
-    <div className="grid min-h-[32rem] place-items-center rounded-[2rem] border border-dashed border-stone-200 bg-white/60 p-8 text-center backdrop-blur-sm">
+    <div className="grid min-h-[32rem] place-items-center rounded-[2rem] border border-dashed border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 p-8 text-center backdrop-blur-sm">
       <div>
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-stone-100 to-stone-200 text-stone-400">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 text-slate-400">
           {isSearching ? (
             <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
           ) : (
             <Sparkles className="h-10 w-10 text-emerald-500" />
           )}
         </div>
-        <h2 className="mt-5 text-2xl font-black text-stone-800">
-          {isSearching ? "Finding the best picks…" : "Ready to search"}
+        <h2 className="mt-5 text-2xl font-black text-slate-800 dark:text-white">
+          {isSearching ? "Finding healthy picks…" : "Ready to search"}
         </h2>
-        <p className="mx-auto mt-2 max-w-sm font-semibold text-stone-400">
+        <p className="mx-auto mt-2 max-w-sm font-semibold text-slate-400">
           {isSearching
-            ? "Fetching product options and enriching with nutrition data."
+            ? "Fetching products and computing nutrition, price, and diet scores."
             : itemCount === 0
-            ? "Add grocery items to your list, then hit Search products."
+            ? "Add grocery items to your list or try Quick Mode above."
             : `Hit "Search products" to compare ${itemCount} item${itemCount !== 1 ? "s" : ""} with ranked options.`}
         </p>
       </div>
@@ -786,25 +901,29 @@ function ProductCarousel({
   item,
   isPaid,
   markBought,
-  boughtIds
+  boughtIds,
+  selectedAllergies,
+  onSelectProduct
 }: {
   item: ResultItem;
   isPaid: boolean;
   markBought: (query: string, product: RankedProduct) => void;
   boughtIds: Set<string>;
+  selectedAllergies: Allergen[];
+  onSelectProduct: (product: RankedProduct) => void;
 }) {
   return (
-    <section className="rounded-[2rem] border border-stone-200/80 bg-white/90 p-5 shadow-sm shadow-stone-900/5 backdrop-blur-sm">
+    <section className="rounded-[2rem] border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 p-5 shadow-sm backdrop-blur-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-emerald-600">
+          <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
             <Search className="h-3 w-3" /> Grocery item
           </p>
-          <h2 className="text-2xl font-black capitalize text-stone-950">{item.query}</h2>
-          <p className="mt-0.5 text-xs font-semibold text-stone-400">{item.options.length} option{item.options.length !== 1 ? "s" : ""} found</p>
+          <h2 className="text-2xl font-black capitalize text-slate-950 dark:text-white">{item.query}</h2>
+          <p className="mt-0.5 text-xs font-semibold text-slate-400">{item.options.length} option{item.options.length !== 1 ? "s" : ""} ranked</p>
         </div>
         {item.error && (
-          <span className="rounded-full bg-red-50 px-3 py-2 text-xs font-black text-red-700 ring-1 ring-red-200">
+          <span className="rounded-full bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-200">
             {item.error}
           </span>
         )}
@@ -812,7 +931,7 @@ function ProductCarousel({
 
       <div className="no-scrollbar mt-4 flex gap-4 overflow-x-auto pb-3">
         {item.options.length === 0 && !item.error && (
-          <p className="rounded-2xl bg-stone-50 px-6 py-8 text-sm font-semibold text-stone-400">
+          <p className="rounded-2xl bg-slate-50 dark:bg-slate-800 px-6 py-8 text-sm font-semibold text-slate-400">
             No results found for this item.
           </p>
         )}
@@ -824,6 +943,8 @@ function ProductCarousel({
               query={item.query}
               onBought={markBought}
               alreadyBought={boughtIds.has(product.providerProductId)}
+              selectedAllergies={selectedAllergies}
+              onSelect={() => onSelectProduct(product)}
             />
           </div>
         ))}
@@ -838,25 +959,41 @@ function ProductCard({
   isPaid,
   query,
   onBought,
-  alreadyBought
+  alreadyBought,
+  selectedAllergies,
+  onSelect
 }: {
   product: RankedProduct;
   isPaid: boolean;
   query: string;
   onBought: (query: string, product: RankedProduct) => void;
   alreadyBought: boolean;
+  selectedAllergies: Allergen[];
+  onSelect: () => void;
 }) {
+  const tags = extractTags(product.health, product.title).slice(0, 3);
+  const matchedAllergens = checkAllergens(product.health, product.title, selectedAllergies);
+  const priceServing = computePricePerServing(
+    product.estimatedPrice,
+    product.health.servingSize,
+    product.health.servingsPerContainer,
+    product.title
+  );
+
   return (
-    <article className="w-[260px] flex-shrink-0 bg-[#F5F5F7] border border-black/[0.04] rounded-3xl p-4 flex flex-col justify-between transition-transform duration-200 hover:-translate-y-0.5">
+    <article
+      onClick={onSelect}
+      className="w-[270px] cursor-pointer flex-shrink-0 bg-slate-100 dark:bg-slate-850 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-4 flex flex-col justify-between transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg group"
+    >
       <div>
         {/* Aspect ratio 1:1 image container on white background */}
-        <div className="relative bg-white rounded-2xl p-2 mb-3 shadow-sm aspect-square flex items-center justify-center overflow-hidden">
+        <div className="relative bg-white dark:bg-slate-900 rounded-2xl p-2 mb-3 shadow-sm aspect-square flex items-center justify-center overflow-hidden">
           {product.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={product.imageUrl}
               alt={product.title}
-              className="max-h-full max-w-full object-contain transition-transform duration-300 hover:scale-105"
+              className="max-h-full max-w-full object-contain transition-transform duration-300 group-hover:scale-105"
               loading="lazy"
             />
           ) : (
@@ -864,73 +1001,101 @@ function ProductCard({
           )}
 
           {/* Health Score Pill */}
-          <div className="absolute right-2 top-2 bg-[#34C759] text-white text-xs font-bold font-num px-2.5 py-1 rounded-full shadow-sm flex items-center gap-1">
+          <div className="absolute right-2 top-2 bg-emerald-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-md flex items-center gap-1">
             <span>{product.overallScore}</span>
             <span className="text-[10px] opacity-80">/100</span>
           </div>
 
           {alreadyBought && (
-            <div className="absolute left-2 top-2 bg-[#34C759] text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+            <div className="absolute left-2 top-2 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
               <Check className="h-3 w-3" /> Bought
+            </div>
+          )}
+
+          {matchedAllergens.length > 0 && (
+            <div className="absolute left-2 bottom-2 bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
+              <ShieldAlert className="h-3 w-3" /> Allergen
             </div>
           )}
         </div>
 
         {/* Title and seller */}
-        <p className="line-clamp-2 min-h-10 text-xs font-bold text-[#1D1D1F] leading-snug">{product.title}</p>
-        <p className="mt-0.5 text-[11px] font-medium text-[#86868B] truncate">{product.seller ?? product.brand ?? "Grocery item"}</p>
+        <p className="line-clamp-2 min-h-10 text-xs font-bold text-slate-900 dark:text-white leading-snug group-hover:text-emerald-600 transition-colors">
+          {product.title}
+        </p>
+        <p className="mt-0.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
+          {product.seller ?? product.brand ?? "Grocery item"}
+        </p>
 
-        {/* Price & Nutrition signals */}
-        <div className="mt-2.5 flex items-center justify-between gap-1">
-          <span className="font-num text-sm font-semibold text-[#1D1D1F]">
-            {product.estimatedPrice === null
-              ? "Est. ?"
-              : `$${product.estimatedPrice.toFixed(2)} est.`}
-          </span>
+        {/* Price & Price per serving */}
+        <div className="mt-2.5 flex items-baseline justify-between gap-1">
+          <div>
+            <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+              {product.estimatedPrice === null ? "Est. ?" : `$${product.estimatedPrice.toFixed(2)}`}
+            </span>
+            {priceServing && (
+              <span className="ml-1.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                ({priceServing.formatted})
+              </span>
+            )}
+          </div>
           <div className="flex gap-1">
             <NutriBadge score={product.health.nutriScore} />
             {product.health.novaGroup && <NovaBadge nova={product.health.novaGroup} />}
           </div>
         </div>
 
+        {/* Tag Badges */}
+        {tags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {tags.map((t) => (
+              <span
+                key={t.id}
+                className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-semibold px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-1"
+              >
+                <span>{t.icon}</span>
+                <span>{t.label}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Diet Fit Badges */}
         {product.dietFit.matchedModes.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
+          <div className="mt-1.5 flex flex-wrap gap-1">
             {product.dietFit.matchedModes.map((mode) => (
               <span
                 key={mode}
-                className="bg-white text-slate-700 text-[11px] font-medium px-2 py-0.5 rounded-md border border-black/[0.06] flex items-center gap-1"
+                className="bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1"
               >
-                <Star className="h-2.5 w-2.5 text-amber-500 fill-amber-500" /> {DIET_LABELS[mode]}
+                <Star className="h-2.5 w-2.5 text-emerald-600 fill-emerald-600" /> {DIET_LABELS[mode]}
               </span>
             ))}
           </div>
         )}
 
         {/* Explanation */}
-        <p className="mt-2 text-[11px] font-medium leading-relaxed text-[#86868B] line-clamp-2">{product.explanation}</p>
+        <p className="mt-2 text-[11px] font-medium leading-relaxed text-slate-500 dark:text-slate-400 line-clamp-2">
+          {product.explanation}
+        </p>
       </div>
 
-      {/* Bought This Button (Idle vs Active state) */}
-      <div className="mt-4 flex gap-2">
+      {/* Action Buttons */}
+      <div className="mt-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
         <button
           id={`bought-btn-${product.providerProductId}`}
           className={cn(
             "flex-1 rounded-2xl py-2.5 text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
             alreadyBought
-              ? "bg-[#34C759]/10 text-[#248A3D] border border-[#34C759]/30"
-              : isPaid
-              ? "bg-black text-white hover:bg-[#1C1C1E] active:scale-95 shadow-sm"
-              : "bg-slate-200 text-slate-400 cursor-not-allowed"
+              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300"
+              : "bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95 shadow-sm"
           )}
           onClick={() => onBought(query, product)}
         >
           {alreadyBought ? (
-            <><Check className="h-3.5 w-3.5" /> Bought this ✓</>
-          ) : isPaid ? (
-            <><ShieldCheck className="h-3.5 w-3.5" /> Bought this</>
+            <><Check className="h-3.5 w-3.5" /> Bought ✓</>
           ) : (
-            <><Crown className="h-3.5 w-3.5 text-amber-400" /> Paid only</>
+            <><ShieldCheck className="h-3.5 w-3.5" /> Bought this</>
           )}
         </button>
 
@@ -939,7 +1104,7 @@ function ProductCard({
             href={product.productUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center rounded-2xl border border-black/[0.08] bg-white px-2.5 py-2.5 text-[#86868B] transition hover:text-[#1D1D1F]"
+            className="flex items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-2.5 text-slate-500 hover:text-slate-900 transition"
             aria-label="View product website"
           >
             <ExternalLink className="h-3.5 w-3.5" />
@@ -958,7 +1123,7 @@ function NutriBadge({ score }: { score: string }) {
     c: "bg-yellow-400 text-yellow-950",
     d: "bg-orange-500 text-white",
     e: "bg-red-600 text-white",
-    unknown: "bg-stone-200 text-stone-500"
+    unknown: "bg-slate-200 text-slate-500"
   };
   return (
     <span className={cn("grid h-6 w-6 place-items-center rounded-lg text-[10px] font-black", colors[score] ?? colors.unknown)}>
@@ -969,7 +1134,7 @@ function NutriBadge({ score }: { score: string }) {
 
 /* ── NOVA group badge ── */
 function NovaBadge({ nova }: { nova: number }) {
-  const color = nova <= 2 ? "bg-emerald-100 text-emerald-800" : nova === 3 ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800";
+  const color = nova <= 2 ? "bg-emerald-100 text-emerald-800" : nova === 3 ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800";
   return (
     <span className={cn("grid h-6 w-9 place-items-center rounded-lg text-[10px] font-black", color)}>
       N{nova}

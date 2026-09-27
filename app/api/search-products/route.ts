@@ -12,6 +12,8 @@ import { normalizeQuery, sha256, uniqueStrings } from "@/lib/utils";
 const schema = z.object({
   items: z.array(z.string().min(1)).min(1).max(100),
   dietModes: z.array(z.string()).optional(),
+  allergies: z.array(z.string()).optional(),
+  zipCode: z.string().regex(/^\d{5}$/).optional().or(z.literal("")),
   limitPerItem: z.number().int().min(1).max(20).optional()
 });
 
@@ -25,12 +27,14 @@ export async function POST(request: Request) {
 
     await enforceDailyLimit(user.id, items.length, entitlement.searchItemLimitPerDay);
 
-    const dietModes = entitlement.canUseDietModes ? sanitizeDietModes(body.dietModes) : [];
+    const dietModes = sanitizeDietModes(body.dietModes);
+    const allergies = (body.allergies ?? []) as any[];
+    const zipCode = body.zipCode && body.zipCode.trim().length === 5 ? body.zipCode.trim() : undefined;
     const limit = Math.min(body.limitPerItem ?? entitlement.optionsPerItem, entitlement.optionsPerItem);
 
     const settled = await Promise.allSettled(
       items.map(async (item) => {
-        const candidates = await searchGoogleShoppingProducts(item, Math.max(limit, 10));
+        const candidates = await searchGoogleShoppingProducts(item, Math.max(limit, 10), zipCode);
         const healthEntries = await Promise.all(
           candidates.map(async (candidate) => {
             let health: HealthInfo = UNKNOWN_HEALTH;
@@ -50,6 +54,7 @@ export async function POST(request: Request) {
             candidates,
             healthById: new Map(healthEntries),
             dietModes,
+            allergies,
             limit
           })
         };

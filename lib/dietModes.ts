@@ -1,3 +1,4 @@
+import { evaluateFodmapFit } from "@/lib/fodmap";
 import { DIET_MODES, type DietMode, type HealthInfo } from "@/lib/types";
 
 export function isDietMode(value: string): value is DietMode {
@@ -9,12 +10,12 @@ export function sanitizeDietModes(values: unknown): DietMode[] {
   return values.filter((value): value is DietMode => typeof value === "string" && isDietMode(value));
 }
 
-export function scoreDietFit(health: HealthInfo, modes: DietMode[]) {
+export function scoreDietFit(health: HealthInfo, modes: DietMode[], title: string = "") {
   if (modes.length === 0) {
     return { score: 0, matchedModes: [] as DietMode[], warnings: [] as string[] };
   }
 
-  const scoreParts = modes.map((mode) => scoreOneMode(health, mode));
+  const scoreParts = modes.map((mode) => scoreOneMode(health, mode, title));
   const score = Math.round(scoreParts.reduce((sum, part) => sum + part.score, 0) / modes.length);
 
   return {
@@ -24,7 +25,7 @@ export function scoreDietFit(health: HealthInfo, modes: DietMode[]) {
   };
 }
 
-function scoreOneMode(health: HealthInfo, mode: DietMode) {
+function scoreOneMode(health: HealthInfo, mode: DietMode, title: string) {
   const n = health.nutrition;
   const text = [health.ingredientsText, health.labelsTags.join(" "), health.categoriesTags.join(" ")]
     .join(" ")
@@ -32,6 +33,11 @@ function scoreOneMode(health: HealthInfo, mode: DietMode) {
   const warnings: string[] = [];
   let score = 50;
   let match = false;
+
+  if (mode === "fodmap") {
+    const res = evaluateFodmapFit(health, title);
+    return { mode, score: res.score, match: res.match, warnings: res.warnings };
+  }
 
   if (mode === "high_protein") {
     score = scoreNumber(n.protein100g, 5, 15, true);

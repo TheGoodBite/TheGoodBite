@@ -9,6 +9,8 @@ type OffProduct = {
   nutriscore_grade?: string;
   nova_group?: number;
   nutriments?: Record<string, number>;
+  serving_size?: string;
+  serving_quantity?: number;
   ingredients_text?: string;
   labels_tags?: string[];
   categories_tags?: string[];
@@ -57,6 +59,8 @@ async function searchByText(candidate: ProductCandidate, query: string) {
         "nutriscore_grade",
         "nova_group",
         "nutriments",
+        "serving_size",
+        "serving_quantity",
         "ingredients_text",
         "labels_tags",
         "categories_tags",
@@ -93,6 +97,8 @@ function fromOffProduct(product: OffProduct, confidence: HealthInfo["confidence"
       energyKcal100g: n["energy-kcal_100g"],
       saturatedFat100g: n["saturated-fat_100g"]
     },
+    servingSize: product.serving_size,
+    servingsPerContainer: product.serving_quantity ? null : undefined,
     ingredientsText: product.ingredients_text,
     labelsTags: product.labels_tags,
     categoriesTags: product.categories_tags,

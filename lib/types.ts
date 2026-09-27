@@ -8,10 +8,25 @@ export const DIET_MODES = [
   "gluten_free",
   "heart_conscious",
   "weight_loss_friendly",
-  "kid_friendly"
+  "kid_friendly",
+  "fodmap"
 ] as const;
 
 export type DietMode = (typeof DIET_MODES)[number];
+
+export const ALLERGENS = [
+  "peanuts",
+  "tree_nuts",
+  "dairy",
+  "eggs",
+  "wheat",
+  "soy",
+  "shellfish",
+  "fish",
+  "sesame"
+] as const;
+
+export type Allergen = (typeof ALLERGENS)[number];
 
 export type SubscriptionStatus =
   | "free"
@@ -59,6 +74,8 @@ export type HealthInfo = {
     energyKcal100g?: number;
     saturatedFat100g?: number;
   };
+  servingSize?: string;
+  servingsPerContainer?: number | null;
   ingredientsText?: string;
   labelsTags: string[];
   categoriesTags: string[];
@@ -88,6 +105,8 @@ export type RankedProduct = ProductCandidate & {
 export type SearchProductsRequest = {
   items: string[];
   dietModes?: DietMode[];
+  allergies?: Allergen[];
+  zipCode?: string;
   limitPerItem?: number;
 };
 

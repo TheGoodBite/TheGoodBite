@@ -16,6 +16,8 @@ export function classifyHealth(input: {
   novaGroup?: number | null;
   confidence: HealthInfo["confidence"];
   nutrition?: HealthInfo["nutrition"];
+  servingSize?: string;
+  servingsPerContainer?: number | null;
   ingredientsText?: string;
   labelsTags?: string[];
   categoriesTags?: string[];
@@ -39,6 +41,8 @@ export function classifyHealth(input: {
     classification,
     confidence: input.confidence,
     nutrition: input.nutrition ?? {},
+    servingSize: input.servingSize,
+    servingsPerContainer: input.servingsPerContainer,
     ingredientsText: input.ingredientsText,
     labelsTags: input.labelsTags ?? [],
     categoriesTags: input.categoriesTags ?? [],

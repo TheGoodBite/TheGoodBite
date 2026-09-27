@@ -152,6 +152,22 @@ describe("scoreDietFit", () => {
     });
   });
 
+  describe("fodmap", () => {
+    it("penalizes high-FODMAP ingredients like garlic, onion, and honey", () => {
+      const h = makeHealth({ ingredientsText: "water, garlic, onion powder, honey" });
+      const result = scoreDietFit(h, ["fodmap"], "Garlic Pasta Sauce");
+      expect(result.score).toBeLessThan(50);
+      expect(result.warnings.some((w) => w.includes("high-FODMAP"))).toBe(true);
+    });
+
+    it("gives high score for low-FODMAP ingredients", () => {
+      const h = makeHealth({ ingredientsText: "rice flour, salt, olive oil" });
+      const result = scoreDietFit(h, ["fodmap"], "Plain Rice Crackers");
+      expect(result.score).toBeGreaterThan(80);
+      expect(result.matchedModes).toContain("fodmap");
+    });
+  });
+
   describe("multiple modes averaging", () => {
     it("averages score across modes", () => {
       const h = makeHealth({ nutrition: { protein100g: 20, sugars100g: 20 } });

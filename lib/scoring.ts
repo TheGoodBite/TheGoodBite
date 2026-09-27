@@ -1,6 +1,7 @@
+import { checkAllergens } from "@/lib/allergens";
 import { scoreDietFit } from "@/lib/dietModes";
 import { scoreHealth } from "@/lib/health";
-import type { DietMode, HealthInfo, ProductCandidate, RankedProduct } from "@/lib/types";
+import type { Allergen, DietMode, HealthInfo, ProductCandidate, RankedProduct } from "@/lib/types";
 import { clamp, normalizeQuery } from "@/lib/utils";
 
 export function rankProducts(input: {
@@ -8,6 +9,7 @@ export function rankProducts(input: {
   candidates: ProductCandidate[];
   healthById: Map<string, HealthInfo>;
   dietModes: DietMode[];
+  allergies?: Allergen[];
   boughtProductIds?: Set<string>;
   limit: number;
 }) {
@@ -23,11 +25,17 @@ export function rankProducts(input: {
       const relevance = scoreRelevance(input.query, candidate);
       const price = scorePrice(candidate.estimatedPrice, minPrice, maxPrice);
       const healthScore = scoreHealth(health);
-      const dietFit = scoreDietFit(health, input.dietModes);
+      const dietFit = scoreDietFit(health, input.dietModes, candidate.title);
       const history = input.boughtProductIds?.has(candidate.providerProductId) ? 10 : 0;
 
+      const matchedAllergens = checkAllergens(health, candidate.title, input.allergies ?? []);
+      const allergenPenalty = matchedAllergens.length > 0 ? 50 : 0;
+      if (matchedAllergens.length > 0) {
+        dietFit.warnings.push(`Contains selected allergen: ${matchedAllergens.join(", ")}`);
+      }
+
       const overallScore = clamp(
-        Math.round(relevance * 0.25 + price * 0.2 + healthScore + dietFit.score * 0.25 + history),
+        Math.round(relevance * 0.25 + price * 0.2 + healthScore + dietFit.score * 0.25 + history - allergenPenalty),
         0,
         100
       );
@@ -44,7 +52,7 @@ export function rankProducts(input: {
         },
         health,
         dietFit,
-        explanation: buildExplanation(candidate, health, dietFit.score, price)
+        explanation: buildExplanation(candidate, health, dietFit.score, price, matchedAllergens)
       };
     })
     .sort((a, b) => {
@@ -67,7 +75,8 @@ function scorePrice(price: number | null, min: number, max: number) {
   return Math.round((1 - (price - min) / (max - min)) * 100);
 }
 
-function buildExplanation(candidate: ProductCandidate, health: HealthInfo, dietScore: number, priceScore: number) {
+function buildExplanation(candidate: ProductCandidate, health: HealthInfo, dietScore: number, priceScore: number, matchedAllergens: Allergen[] = []) {
+  if (matchedAllergens.length > 0) return `⚠️ Warning: May contain selected allergen (${matchedAllergens.join(", ")}).`;
   if (dietScore >= 70) return "Strong diet fit with a reasonable estimated price.";
   if (health.classification === "strict") return "Better health score than most similar options.";
   if (priceScore >= 80) return "Low estimated price, but check the health badges.";

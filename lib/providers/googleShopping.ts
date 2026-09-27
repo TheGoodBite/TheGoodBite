@@ -14,8 +14,8 @@ type SerpApiShoppingResult = {
   product_link?: string;
 };
 
-export async function searchGoogleShoppingProducts(query: string, limit: number) {
-  const cacheKey = `products:serpapi:${await sha256(JSON.stringify({ query, limit }))}`;
+export async function searchGoogleShoppingProducts(query: string, limit: number, location?: string) {
+  const cacheKey = `products:serpapi:${await sha256(JSON.stringify({ query, limit, location }))}`;
   return getOrSet(cacheKey, 60 * 30, async () => {
     if (!process.env.SERPAPI_API_KEY) {
       return mockShoppingResults(query, limit);
@@ -26,6 +26,9 @@ export async function searchGoogleShoppingProducts(query: string, limit: number)
     url.searchParams.set("q", query);
     url.searchParams.set("gl", "us");
     url.searchParams.set("hl", "en");
+    if (location) {
+      url.searchParams.set("location", location);
+    }
     url.searchParams.set("api_key", process.env.SERPAPI_API_KEY);
 
     const response = await fetch(url, { next: { revalidate: 1800 } });
