@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { X, ExternalLink, Check, AlertTriangle, ShieldAlert, Sparkles, Heart } from "lucide-react";
+import { X, ExternalLink, Check, AlertTriangle, ShieldAlert, Sparkles, Heart, Info } from "lucide-react";
 import type { Allergen, RankedProduct } from "@/lib/types";
 import { ALLERGEN_DETAILS, checkAllergens } from "@/lib/allergens";
 import { computePricePerServing } from "@/lib/pricing";
@@ -13,6 +13,12 @@ interface ProductDetailModalProps {
   isBought: boolean;
   onToggleBought: (productId: string) => void;
   selectedAllergies?: Allergen[];
+}
+
+function formatVal(val?: number, unit = "g"): string {
+  if (val === undefined || !Number.isFinite(val)) return "N/A";
+  const rounded = Math.round(val * 10) / 10;
+  return `${rounded} ${unit}`;
 }
 
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
@@ -43,6 +49,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     product.title
   );
 
+  const isNutritionIncomplete =
+    n.protein100g === undefined &&
+    n.sugars100g === undefined &&
+    n.energyKcal100g === undefined &&
+    health.nutriScore === "unknown";
+
   // Score styling
   const scoreColor =
     product.overallScore >= 80
@@ -68,27 +80,27 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   }
 
   if ((n.protein100g ?? 0) >= 8) {
-    positives.push({ label: "High Protein", detail: `${n.protein100g}g per 100g` });
+    positives.push({ label: "High Protein", detail: `${formatVal(n.protein100g)} per 100g` });
   }
 
   if ((n.fiber100g ?? 0) >= 3) {
-    positives.push({ label: "Good Source of Fiber", detail: `${n.fiber100g}g per 100g` });
+    positives.push({ label: "Good Source of Fiber", detail: `${formatVal(n.fiber100g)} per 100g` });
   }
 
   if (n.sugars100g !== undefined && n.sugars100g <= 5) {
-    positives.push({ label: "Low Sugar", detail: `${n.sugars100g}g per 100g` });
+    positives.push({ label: "Low Sugar", detail: `${formatVal(n.sugars100g)} per 100g` });
   } else if ((n.sugars100g ?? 0) > 15) {
-    negatives.push({ label: "High Sugar", detail: `${n.sugars100g}g per 100g` });
+    negatives.push({ label: "High Sugar", detail: `${formatVal(n.sugars100g)} per 100g` });
   }
 
   if (n.sodium100g !== undefined && n.sodium100g <= 0.15) {
-    positives.push({ label: "Low Sodium", detail: `${n.sodium100g}g per 100g` });
+    positives.push({ label: "Low Sodium", detail: `${formatVal(n.sodium100g)} per 100g` });
   } else if ((n.sodium100g ?? 0) > 0.5) {
-    negatives.push({ label: "High Sodium", detail: `${n.sodium100g}g per 100g` });
+    negatives.push({ label: "High Sodium", detail: `${formatVal(n.sodium100g)} per 100g` });
   }
 
   if ((n.saturatedFat100g ?? 0) > 5) {
-    negatives.push({ label: "High Saturated Fat", detail: `${n.saturatedFat100g}g per 100g` });
+    negatives.push({ label: "High Saturated Fat", detail: `${formatVal(n.saturatedFat100g)} per 100g` });
   }
 
   return (
@@ -170,6 +182,19 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Incomplete Data Notice */}
+          {isNutritionIncomplete && (
+            <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl flex items-start gap-3 text-stone-700 text-xs">
+              <Info className="w-5 h-5 text-stone-500 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-bold text-stone-900">Limited Nutrition Data</h4>
+                <p className="mt-0.5 text-stone-500">
+                  Open Food Facts currently has a partial record for this product barcode or name. Always inspect the physical package label at the store.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Allergy Warning Banner */}
           {matchedAllergens.length > 0 && (
@@ -299,37 +324,37 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               <div className="flex justify-between px-4 py-2.5 bg-stone-50">
                 <span className="text-stone-600">Energy</span>
                 <span className="font-medium text-stone-900">
-                  {n.energyKcal100g !== undefined ? `${n.energyKcal100g} kcal` : "N/A"}
+                  {formatVal(n.energyKcal100g, "kcal")}
                 </span>
               </div>
               <div className="flex justify-between px-4 py-2.5">
                 <span className="text-stone-600">Protein</span>
                 <span className="font-medium text-stone-900">
-                  {n.protein100g !== undefined ? `${n.protein100g} g` : "N/A"}
+                  {formatVal(n.protein100g, "g")}
                 </span>
               </div>
               <div className="flex justify-between px-4 py-2.5 bg-stone-50">
                 <span className="text-stone-600">Sugars</span>
                 <span className="font-medium text-stone-900">
-                  {n.sugars100g !== undefined ? `${n.sugars100g} g` : "N/A"}
+                  {formatVal(n.sugars100g, "g")}
                 </span>
               </div>
               <div className="flex justify-between px-4 py-2.5">
                 <span className="text-stone-600">Saturated Fat</span>
                 <span className="font-medium text-stone-900">
-                  {n.saturatedFat100g !== undefined ? `${n.saturatedFat100g} g` : "N/A"}
+                  {formatVal(n.saturatedFat100g, "g")}
                 </span>
               </div>
               <div className="flex justify-between px-4 py-2.5 bg-stone-50">
                 <span className="text-stone-600">Fiber</span>
                 <span className="font-medium text-stone-900">
-                  {n.fiber100g !== undefined ? `${n.fiber100g} g` : "N/A"}
+                  {formatVal(n.fiber100g, "g")}
                 </span>
               </div>
               <div className="flex justify-between px-4 py-2.5">
                 <span className="text-stone-600">Sodium</span>
                 <span className="font-medium text-stone-900">
-                  {n.sodium100g !== undefined ? `${n.sodium100g} g` : "N/A"}
+                  {formatVal(n.sodium100g, "g")}
                 </span>
               </div>
             </div>
