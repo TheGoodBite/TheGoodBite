@@ -43,6 +43,7 @@ type ListRecord = {
 const DIET_LABELS: Record<DietMode, string> = {
   high_protein: "High protein",
   low_sugar: "Low sugar",
+  low_carb: "Low carb",
   diabetes_conscious: "Diabetes-conscious",
   low_sodium: "Low sodium",
   vegetarian: "Vegetarian",
@@ -57,6 +58,7 @@ const DIET_LABELS: Record<DietMode, string> = {
 const DIET_ICONS: Record<DietMode, string> = {
   high_protein: "💪",
   low_sugar: "🍬",
+  low_carb: "🥑",
   diabetes_conscious: "🩺",
   low_sodium: "🧂",
   vegetarian: "🥕",

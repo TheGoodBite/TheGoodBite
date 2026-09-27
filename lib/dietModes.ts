@@ -51,6 +51,12 @@ function scoreOneMode(health: HealthInfo, mode: DietMode, title: string) {
     if (!match) warnings.push("Higher sugar");
   }
 
+  if (mode === "low_carb") {
+    score = scoreNumber(n.carbohydrates100g, 3, 20, false);
+    match = (n.carbohydrates100g ?? 99) <= 10;
+    if (!match) warnings.push("Higher carbohydrates");
+  }
+
   if (mode === "low_sodium") {
     score = scoreNumber(n.sodium100g, 0.12, 0.5, false);
     match = (n.sodium100g ?? 99) <= 0.3;

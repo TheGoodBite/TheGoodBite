@@ -1,6 +1,7 @@
 export const DIET_MODES = [
   "high_protein",
   "low_sugar",
+  "low_carb",
   "diabetes_conscious",
   "low_sodium",
   "vegetarian",
@@ -68,6 +69,7 @@ export type HealthInfo = {
   nutrition: {
     protein100g?: number;
     sugars100g?: number;
+    carbohydrates100g?: number;
     sodium100g?: number;
     salt100g?: number;
     fiber100g?: number;
