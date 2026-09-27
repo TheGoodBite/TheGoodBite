@@ -58,6 +58,7 @@ type SavedList = {
   id: string;
   name: string;
   grocery_list_items?: {
+    id?: string;
     query: string;
     sort_order: number;
     is_active: boolean;
@@ -72,15 +73,9 @@ const productKey = (product: RankedProduct) =>
 export default function Dashboard() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [session, setSession] = useState<Session | null>(null);
-  const [items, setItems] = useState([
-    "Chicken sausage",
-    "Corn flakes",
-    "Greek yogurt",
-    "Broccoli",
-    "Olive oil",
-    "Eggs",
-    "Milk",
-  ]);
+  const [items, setItems] = useState<string[]>([]);
+  const [activeListId, setActiveListId] = useState<string | null>(null);
+  const itemIds = useRef<Record<string, string>>({});
   const [name, setName] = useState("Weekly groceries");
   const [input, setInput] = useState("");
   const [quickMode, setQuickMode] = useState(false);
@@ -133,6 +128,8 @@ export default function Dashboard() {
       if (!next) {
         setLists([]);
         setBought([]);
+        setActiveListId(null);
+        itemIds.current = {};
       }
     });
     return () => data.subscription.unsubscribe();
@@ -209,6 +206,44 @@ export default function Dashboard() {
     }
     setItems((current) => [...current, ...additions]);
     setInput("");
+    if (additions.length)
+      void searchProducts(
+        stale ? [...items, ...additions] : [...pendingQueries, ...additions],
+        !stale,
+      );
+  }
+  function renameItem(query: string, value: string) {
+    const next = value.trim();
+    if (!next || next === query) return;
+    if (
+      items.some(
+        (item) =>
+          item !== query && normalizeQuery(item) === normalizeQuery(next),
+      )
+    ) {
+      setMessage("That item is already in your list.");
+      return;
+    }
+    const key = normalizeQuery(query);
+    if (itemIds.current[key]) {
+      itemIds.current[normalizeQuery(next)] = itemIds.current[key];
+      delete itemIds.current[key];
+    }
+    setItems((current) =>
+      current.map((item) => (item === query ? next : item)),
+    );
+    setChecked((current) => current.filter((item) => item !== key));
+    setResults((current) =>
+      current.filter((row) => normalizeQuery(row.query) !== key),
+    );
+    if (selection && normalizeQuery(selection.query) === key)
+      setSelection(null);
+    void searchProducts(
+      stale
+        ? items.map((item) => (item === query ? next : item))
+        : [...pendingQueries.filter((item) => item !== key), next],
+      !stale,
+    );
   }
   function moveItem(from: number, to: number) {
     if (searching || to < 0 || to >= items.length || from === to) return;
@@ -249,8 +284,14 @@ export default function Dashboard() {
       setBusy(false);
     }
   }
-  async function searchProducts() {
-    const queries = quickMode ? [quickQuery.trim()].filter(Boolean) : items;
+  async function searchProducts(requested?: string[], incremental = false) {
+    const queries = [
+      ...new Set(
+        (
+          requested ?? (quickMode ? [quickQuery.trim()].filter(Boolean) : items)
+        ).map(normalizeQuery),
+      ),
+    ];
     if (!queries.length) {
       setMessage("Add an item to find options.");
       return;
@@ -269,13 +310,15 @@ export default function Dashboard() {
     const controller = new AbortController();
     requestRef.current = controller;
     setPendingQueries(queries.map(normalizeQuery));
-    setResults(
-      queries.map((query) => ({ query: normalizeQuery(query), options: [] })),
-    );
+    setResults((current) => [
+      ...(incremental
+        ? current.filter((row) => !queries.includes(normalizeQuery(row.query)))
+        : []),
+      ...queries.map((query) => ({ query, options: [] })),
+    ]);
     setSearchedPreferences(preferenceKey);
-    setEditing(false);
     setMessage("");
-    setSelection(null);
+    if (!incremental) setSelection(null);
     try {
       const response = await fetch("/api/search-products", {
         method: "POST",
@@ -322,7 +365,9 @@ export default function Dashboard() {
       if (!controller.signal.aborted) {
         setResults((current) =>
           current.map((row) =>
-            !row.options.length && !row.error
+            queries.includes(normalizeQuery(row.query)) &&
+            !row.options.length &&
+            !row.error
               ? {
                   ...row,
                   error: "Search did not finish for this item. Please retry.",
@@ -356,6 +401,12 @@ export default function Dashboard() {
   }
   function openList(list: SavedList) {
     clearResults();
+    setActiveListId(list.id);
+    itemIds.current = Object.fromEntries(
+      (list.grocery_list_items ?? [])
+        .filter((item) => item.id)
+        .map((item) => [normalizeQuery(item.query), item.id!]),
+    );
     setName(list.name);
     setItems(
       (list.grocery_list_items || [])
@@ -461,6 +512,8 @@ export default function Dashboard() {
             onClick={() => {
               clearResults();
               setItems([]);
+              setActiveListId(null);
+              itemIds.current = {};
               setName("My grocery list");
               setChecked([]);
               setQuickMode(false);
@@ -524,91 +577,93 @@ export default function Dashboard() {
               {!quickMode && (
                 <button
                   className="secondary-button"
-                  disabled={searching || !items.length}
+                  disabled={searching || (!items.length && !activeListId)}
                   onClick={() => setOverlay("save")}
                 >
                   Save list
                 </button>
               )}
             </div>
-            <form
-              className="item-entry"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (quickMode) void searchProducts();
-                else addItems();
-              }}
-            >
-              <Search size={19} />
-              {quickMode ? (
-                <input
-                  aria-label="Quick lookup"
-                  placeholder="Try Greek yogurt, cereal, olive oil…"
-                  value={quickQuery}
-                  maxLength={160}
-                  onChange={(e) => setQuickQuery(e.target.value)}
-                />
-              ) : (
-                <textarea
-                  aria-label="Add grocery items"
-                  rows={1}
-                  placeholder="Add an item, or paste your grocery list…"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      addItems();
-                    }
-                  }}
-                />
-              )}
-              <button
-                className="primary-button"
-                disabled={
-                  quickMode ? searching || !quickQuery.trim() : !input.trim()
-                }
-                type="submit"
+            <div className="sticky-list-controls">
+              <form
+                className="item-entry"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (quickMode) void searchProducts();
+                  else addItems();
+                }}
               >
-                {quickMode ? <Search size={17} /> : <Plus size={18} />}
-                {quickMode ? "Find" : "Add"}
-              </button>
-            </form>
-            <div className="list-toolbar">
-              <button
-                className="text-button"
-                onClick={() => setOverlay("preferences")}
-              >
-                <SlidersHorizontal size={16} />
-                {dietModes.length + allergies.length
-                  ? `${dietModes.length + allergies.length} preference${dietModes.length + allergies.length === 1 ? "" : "s"}`
-                  : "Make it yours"}
-              </button>
-              <div>
-                {!quickMode && (
-                  <>
-                    <button
-                      className="text-button"
-                      aria-pressed={editing}
-                      disabled={searching}
-                      onClick={() => setEditing(!editing)}
-                    >
-                      {editing ? "Done editing" : "Edit list"}
-                    </button>
-                    <button
-                      className="primary-button"
-                      disabled={searching || !items.length}
-                      onClick={() => void searchProducts()}
-                    >
-                      {searching ? (
-                        <Loader2 className="spin" size={16} />
-                      ) : (
-                        <Search size={16} />
-                      )}
-                      {searching ? "Finding options…" : "Find better options"}
-                    </button>
-                  </>
+                <Search size={19} />
+                {quickMode ? (
+                  <input
+                    aria-label="Quick lookup"
+                    placeholder="Try Greek yogurt, cereal, olive oil…"
+                    value={quickQuery}
+                    maxLength={160}
+                    onChange={(e) => setQuickQuery(e.target.value)}
+                  />
+                ) : (
+                  <textarea
+                    aria-label="Add grocery items"
+                    rows={1}
+                    placeholder="Add an item, or paste your grocery list…"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        addItems();
+                      }
+                    }}
+                  />
                 )}
+                <button
+                  className="primary-button"
+                  disabled={
+                    quickMode ? searching || !quickQuery.trim() : !input.trim()
+                  }
+                  type="submit"
+                >
+                  {quickMode ? <Search size={17} /> : <Plus size={18} />}
+                  {quickMode ? "Find" : "Add"}
+                </button>
+              </form>
+              <div className="list-toolbar">
+                <button
+                  className="text-button"
+                  onClick={() => setOverlay("preferences")}
+                >
+                  <SlidersHorizontal size={16} />
+                  {dietModes.length + allergies.length
+                    ? `${dietModes.length + allergies.length} preference${dietModes.length + allergies.length === 1 ? "" : "s"}`
+                    : "Make it yours"}
+                </button>
+                <div>
+                  {!quickMode && (
+                    <>
+                      <button
+                        className="text-button"
+                        aria-pressed={editing}
+                        disabled={searching}
+                        onClick={() => setEditing(!editing)}
+                      >
+                        {editing ? "Done editing" : "Edit list"}
+                      </button>
+                      <button
+                        className="primary-button"
+                        disabled={searching || !items.length}
+                        onClick={() => void searchProducts()}
+                      >
+                        {searching ? (
+                          <Loader2 className="spin" size={16} />
+                        ) : (
+                          <Search size={16} />
+                        )}
+                        {searching ? "Finding options…" : "Find better options"}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
             {message && (
@@ -680,13 +735,34 @@ export default function Dashboard() {
                       {complete && <Check size={16} />}
                     </button>
                     <div className="row-summary">
-                      <button
-                        className="row-title"
-                        disabled={!best || loading}
-                        onClick={() => best && select(query, best)}
-                      >
-                        {query}
-                      </button>
+                      {quickMode ? (
+                        <button
+                          className="row-title"
+                          disabled={!best || loading}
+                          onClick={() => best && select(query, best)}
+                        >
+                          {query}
+                        </button>
+                      ) : (
+                        <input
+                          className="row-title row-title-input"
+                          aria-label={`Edit ${query}`}
+                          defaultValue={query}
+                          maxLength={160}
+                          onBlur={(event) => {
+                            renameItem(query, event.currentTarget.value);
+                            event.currentTarget.value = query;
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter")
+                              event.currentTarget.blur();
+                            if (event.key === "Escape") {
+                              event.currentTarget.value = query;
+                              event.currentTarget.blur();
+                            }
+                          }}
+                        />
+                      )}
                       <p>
                         {loading ? (
                           <>
@@ -1060,7 +1136,36 @@ export default function Dashboard() {
               e.preventDefault();
               void perform(async () => {
                 if (!session) throw new Error("Sign in to save your list.");
-                await api("/api/lists", "POST", { name: name.trim(), items });
+                let savedId = activeListId;
+                if (activeListId) {
+                  await api(`/api/lists/${activeListId}`, "PATCH", {
+                    name: name.trim(),
+                    items: items.map((query, sort_order) => ({
+                      id: itemIds.current[normalizeQuery(query)],
+                      query,
+                      sort_order,
+                      is_active: true,
+                    })),
+                  });
+                } else {
+                  const data = await api("/api/lists", "POST", {
+                    name: name.trim(),
+                    items,
+                  });
+                  savedId = data.list.id;
+                  setActiveListId(savedId);
+                }
+                const refreshed = await api("/api/lists");
+                setLists(refreshed.lists || []);
+                const saved = (refreshed.lists as SavedList[]).find(
+                  (list) => list.id === savedId,
+                );
+                if (saved)
+                  itemIds.current = Object.fromEntries(
+                    (saved.grocery_list_items ?? [])
+                      .filter((item) => item.id)
+                      .map((item) => [normalizeQuery(item.query), item.id!]),
+                  );
                 setOverlay(null);
                 setMessage("List saved.");
               });

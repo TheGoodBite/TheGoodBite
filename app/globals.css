@@ -1368,3 +1368,34 @@ img {
 .offers summary {
   cursor: pointer;
 }
+
+/* Keep list entry and actions within reach on desktop and mobile. */
+.sticky-list-controls {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--background, #fff);
+  padding-top: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+.sticky-list-controls .list-toolbar {
+  margin-bottom: 0;
+}
+.row-title-input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  padding: 4px 0;
+  text-overflow: ellipsis;
+}
+.row-title-input:hover {
+  border-color: var(--line);
+}
+.row-title-input:focus {
+  outline: 2px solid var(--ink, #111);
+  outline-offset: 3px;
+}
