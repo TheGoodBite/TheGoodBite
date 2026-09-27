@@ -160,11 +160,12 @@ describe("scoreDietFit", () => {
       expect(result.warnings.some((w) => w.includes("high-FODMAP"))).toBe(true);
     });
 
-    it("gives high score for low-FODMAP ingredients", () => {
+    it("does not certify FODMAP suitability from an ingredient keyword screen", () => {
       const h = makeHealth({ ingredientsText: "rice flour, salt, olive oil" });
       const result = scoreDietFit(h, ["fodmap"], "Plain Rice Crackers");
-      expect(result.score).toBeGreaterThan(80);
-      expect(result.matchedModes).toContain("fodmap");
+      expect(result.score).toBe(45);
+      expect(result.matchedModes).not.toContain("fodmap");
+      expect(result.evidence?.fodmap).toBe("unknown");
     });
   });
 

@@ -1,44 +1,43 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowRight,
   Check,
-  ChevronLeft,
+  ChevronDown,
   ChevronRight,
-  Crown,
-  ExternalLink,
-  Info,
+  FolderOpen,
+  GripVertical,
+  List,
   Loader2,
   LogOut,
   MapPin,
   Plus,
   Search,
-  ShieldAlert,
-  ShieldCheck,
-  ShoppingBasket,
-  Sparkles,
-  Star,
+  SlidersHorizontal,
   Trash2,
+  User,
   X,
-  Zap
 } from "lucide-react";
-import type { AuthChangeEvent, Session, SupabaseClient } from "@supabase/supabase-js";
-import { ALLERGENS, DIET_MODES, type Allergen, type DietMode, type RankedProduct, type SearchProductsResponse } from "@/lib/types";
-import { ALLERGEN_DETAILS, checkAllergens } from "@/lib/allergens";
-import { computePricePerServing } from "@/lib/pricing";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
-import { extractTags } from "@/lib/tags";
-import { cn, uniqueStrings } from "@/lib/utils";
-
-import { BroccoliBiteLogo } from "@/components/BroccoliBiteLogo";
-import { ProductDetailModal } from "@/components/ProductDetailModal";
-
-type ResultItem = SearchProductsResponse["items"][number];
-type ListRecord = {
-  id: string;
-  name: string;
-  grocery_list_items?: Array<{ id: string; query: string; sort_order: number; is_active: boolean }>;
-};
+import {
+  ALLERGENS,
+  DIET_MODES,
+  type Allergen,
+  type DietMode,
+  type RankedProduct,
+  type SearchProductsResponse,
+} from "@/lib/types";
+import { ALLERGEN_DETAILS } from "@/lib/allergens";
+import { consumeSearch } from "@/lib/searchStream";
+import { normalizeQuery } from "@/lib/utils";
+import { MeezanyLogo } from "./MeezanyLogo";
+import { Sheet } from "./Sheet";
+import { ProductImage, ScoreBadge, priceLabel } from "./ProductPresentation";
+import { ProductDetail } from "./ProductDetail";
 
 const DIET_LABELS: Record<DietMode, string> = {
   high_protein: "High protein",
@@ -52,1098 +51,1157 @@ const DIET_LABELS: Record<DietMode, string> = {
   heart_conscious: "Heart-conscious",
   weight_loss_friendly: "Weight-loss friendly",
   kid_friendly: "Kid-friendly",
-  fodmap: "FODMAP (Beta)"
+  fodmap: "FODMAP (beta)",
 };
-
-const DIET_ICONS: Record<DietMode, string> = {
-  high_protein: "💪",
-  low_sugar: "🍬",
-  low_carb: "🥑",
-  diabetes_conscious: "🩺",
-  low_sodium: "🧂",
-  vegetarian: "🥕",
-  vegan: "🌱",
-  gluten_free: "🌾",
-  heart_conscious: "❤️",
-  weight_loss_friendly: "⚖️",
-  kid_friendly: "👶",
-  fodmap: "🌾"
+type ResultItem = SearchProductsResponse["items"][number];
+type SavedList = {
+  id: string;
+  name: string;
+  grocery_list_items?: {
+    query: string;
+    sort_order: number;
+    is_active: boolean;
+  }[];
 };
+type Selection = { query: string; product: RankedProduct };
+type Overlay =
+  "preferences" | "account" | "lists" | "save" | "options" | "detail" | null;
+const productKey = (product: RankedProduct) =>
+  `${product.provider}:${product.providerProductId}`;
 
 export default function Dashboard() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [session, setSession] = useState<Session | null>(null);
-  const [demoMode] = useState(!supabase);
-  const [email, setEmail] = useState("");
-  const [itemInput, setItemInput] = useState("");
-  const [items, setItems] = useState(["mac and cheese", "potato chips", "greek yogurt"]);
+  const [items, setItems] = useState([
+    "Chicken sausage",
+    "Corn flakes",
+    "Greek yogurt",
+    "Broccoli",
+    "Olive oil",
+    "Eggs",
+    "Milk",
+  ]);
+  const [name, setName] = useState("Weekly groceries");
+  const [input, setInput] = useState("");
+  const [quickMode, setQuickMode] = useState(false);
+  const [quickQuery, setQuickQuery] = useState("");
+  const [results, setResults] = useState<ResultItem[]>([]);
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [optionQuery, setOptionQuery] = useState("");
+  const [sort, setSort] = useState("match");
+  const [overlay, setOverlay] = useState<Overlay>(null);
   const [dietModes, setDietModes] = useState<DietMode[]>([]);
   const [allergies, setAllergies] = useState<Allergen[]>([]);
-  const [zipCode, setZipCode] = useState<string>("");
-  const [quickMode, setQuickMode] = useState<boolean>(false);
-  const [quickQuery, setQuickQuery] = useState<string>("");
-  const [results, setResults] = useState<ResultItem[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [message, setMessage] = useState<{ text: string; type: "info" | "success" | "error" } | null>(null);
-  const [isPaid, setIsPaid] = useState(true);
-  const [lists, setLists] = useState<ListRecord[]>([]);
-  const [showLists, setShowLists] = useState(false);
-  const [boughtIds, setBoughtIds] = useState<Set<string>>(new Set());
-  const [showMagicLink, setShowMagicLink] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<RankedProduct | null>(null);
-
-  const signedIn = demoMode || Boolean(session);
-  const accessToken = demoMode ? "dev-token" : session?.access_token;
+  const [bulkPreference, setBulkPreference] = useState<
+    "everyday" | "bulk" | "any"
+  >("everyday");
+  const [zipCode, setZipCode] = useState("");
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [searchedPreferences, setSearchedPreferences] = useState("");
+  const [pendingQueries, setPendingQueries] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [lists, setLists] = useState<SavedList[]>([]);
+  const [email, setEmail] = useState("");
+  const [bought, setBought] = useState<string[]>([]);
+  const [checked, setChecked] = useState<string[]>([]);
+  const [editing, setEditing] = useState(false);
+  const requestRef = useRef<AbortController | null>(null);
+  const accessToken =
+    session?.access_token ??
+    (!supabase && process.env.NODE_ENV !== "production"
+      ? "dev-token"
+      : undefined);
+  const preferenceKey = JSON.stringify({
+    dietModes,
+    allergies,
+    zipCode,
+    bulkPreference,
+  });
+  const stale = results.length > 0 && searchedPreferences !== preferenceKey;
+  const searching = pendingQueries.length > 0;
+  const visibleQueries = quickMode ? results.map((row) => row.query) : items;
 
   useEffect(() => {
     if (!supabase) return;
-
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, nextSession: Session | null) => {
-      setSession(nextSession);
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) setMessage(error.message);
+      else setSession(data.session);
     });
-
+    const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+      setSession(next);
+      if (!next) {
+        setLists([]);
+        setBought([]);
+      }
+    });
     return () => data.subscription.unsubscribe();
   }, [supabase]);
-
-  // Restore saved preferences
   useEffect(() => {
     try {
-      const savedZip = localStorage.getItem("goodbite_zip");
-      if (savedZip) setZipCode(savedZip);
-      const savedAllergies = localStorage.getItem("goodbite_allergies");
-      if (savedAllergies) setAllergies(JSON.parse(savedAllergies));
-    } catch {}
-  }, []);
-
-  const handleZipChange = (newZip: string) => {
-    setZipCode(newZip);
-    try {
-      localStorage.setItem("goodbite_zip", newZip);
-    } catch {}
-  };
-
-  const toggleAllergen = (allergen: Allergen) => {
-    setAllergies((prev) => {
-      const next = prev.includes(allergen) ? prev.filter((a) => a !== allergen) : [...prev, allergen];
-      try {
-        localStorage.setItem("goodbite_allergies", JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
-
-  function notify(text: string, type: "info" | "success" | "error" = "info") {
-    setMessage({ text, type });
-    setTimeout(() => setMessage(null), 4000);
-  }
-
-  async function signInWithGoogle() {
-    if (!supabase) return;
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin }
-    });
-  }
-
-  async function sendMagicLink() {
-    if (!supabase || !email) return;
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.origin }
-    });
-    if (error) {
-      notify(error.message, "error");
-    } else {
-      notify("Magic link sent! Check your email.", "success");
-      setShowMagicLink(false);
+      const saved = JSON.parse(
+        localStorage.getItem("meezany_preferences") || "null",
+      );
+      if (["everyday", "bulk", "any"].includes(saved?.bulkPreference))
+        setBulkPreference(saved.bulkPreference);
+      const zip = saved?.zipCode ?? localStorage.getItem("goodbite_zip") ?? "";
+      if (/^\d{0,5}$/.test(zip)) setZipCode(zip);
+      const avoid =
+        saved?.allergies ??
+        JSON.parse(localStorage.getItem("goodbite_allergies") || "[]");
+      if (Array.isArray(avoid))
+        setAllergies(avoid.filter((a: Allergen) => ALLERGENS.includes(a)));
+      if (Array.isArray(saved?.dietModes))
+        setDietModes(
+          saved.dietModes.filter((d: DietMode) => DIET_MODES.includes(d)),
+        );
+    } catch {
+      /* Invalid or blocked storage should not prevent using the app. */
     }
-  }
+    setPreferencesReady(true);
+    return () => requestRef.current?.abort();
+  }, []);
+  useEffect(() => {
+    if (preferencesReady) {
+      try {
+        localStorage.setItem("meezany_preferences", preferenceKey);
+      } catch {
+        /* Storage may be disabled. */
+      }
+    }
+  }, [preferenceKey, preferencesReady]);
 
-  async function signOut() {
-    if (supabase) await supabase.auth.signOut();
-    setSession(null);
+  function clearResults() {
+    requestRef.current?.abort();
+    requestRef.current = null;
+    setPendingQueries([]);
     setResults([]);
-    setBoughtIds(new Set());
+    setSelection(null);
+    setOptionQuery("");
+    setOverlay(null);
+    setMessage("");
   }
-
-  function addItems(raw: string) {
-    const parsed = raw
+  function switchMode(quick: boolean) {
+    if (quick !== quickMode) {
+      clearResults();
+      setQuickMode(quick);
+    } else setOverlay(null);
+  }
+  function addItems() {
+    const parsed = input
       .split(/[,\n]/)
-      .map((value) => value.trim())
+      .map((s) => s.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim())
       .filter(Boolean);
-    if (parsed.length === 0) return;
-    setItems((current) => uniqueStrings([...current, ...parsed]));
-    setItemInput("");
+    if (parsed.some((s) => s.length > 160)) {
+      setMessage("Keep each grocery item under 160 characters.");
+      return;
+    }
+    const existing = new Set(items.map(normalizeQuery));
+    const additions = parsed.filter((s) => {
+      const key = normalizeQuery(s);
+      if (existing.has(key)) return false;
+      existing.add(key);
+      return true;
+    });
+    if (items.length + additions.length > 100) {
+      setMessage("A list can have up to 100 items.");
+      return;
+    }
+    setItems((current) => [...current, ...additions]);
+    setInput("");
   }
-
-  function moveItem(index: number, direction: -1 | 1) {
+  function moveItem(from: number, to: number) {
+    if (searching || to < 0 || to >= items.length || from === to) return;
     setItems((current) => {
       const next = [...current];
-      const target = index + direction;
-      if (target < 0 || target >= next.length) return current;
-      [next[index], next[target]] = [next[target], next[index]];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
       return next;
     });
   }
-
-  function toggleDietMode(mode: DietMode) {
-    setDietModes((current) => (current.includes(mode) ? current.filter((item) => item !== mode) : [...current, mode]));
+  async function api(path: string, method = "GET", body?: unknown) {
+    if (!accessToken) throw new Error("Sign in to continue.");
+    const response = await fetch(path, {
+      method,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${accessToken}`,
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const data = await response.json();
+    if (!response.ok)
+      throw new Error(data.error || "Something went wrong. Please try again.");
+    return data;
   }
-
-  async function searchProducts(overrideItems?: string[]) {
-    if (!signedIn || !accessToken) {
-      notify("Sign in to search product options.", "error");
+  async function perform(action: () => Promise<void>) {
+    setBusy(true);
+    setMessage("");
+    try {
+      await action();
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function searchProducts() {
+    const queries = quickMode ? [quickQuery.trim()].filter(Boolean) : items;
+    if (!queries.length) {
+      setMessage("Add an item to find options.");
       return;
     }
-
-    const searchItems = overrideItems ?? (quickMode ? [quickQuery.trim()] : items);
-    if (searchItems.length === 0 || searchItems.every((i) => !i)) {
-      notify("Enter at least one item to search.", "info");
+    if (!accessToken) {
+      setOverlay("account");
+      setMessage("Sign in to find your product options.");
       return;
     }
-
-    setIsSearching(true);
-    setMessage(null);
+    if (zipCode && zipCode.length !== 5) {
+      setOverlay("preferences");
+      setMessage("Enter a five-digit USA ZIP code, or leave it blank.");
+      return;
+    }
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setPendingQueries(queries.map(normalizeQuery));
+    setResults(
+      queries.map((query) => ({ query: normalizeQuery(query), options: [] })),
+    );
+    setSearchedPreferences(preferenceKey);
+    setEditing(false);
+    setMessage("");
+    setSelection(null);
     try {
       const response = await fetch("/api/search-products", {
         method: "POST",
+        signal: controller.signal,
         headers: {
+          accept: "application/x-ndjson",
           "content-type": "application/json",
-          authorization: `Bearer ${accessToken}`
+          authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          items: searchItems,
+          items: queries,
           dietModes,
           allergies,
-          zipCode: zipCode.length === 5 ? zipCode : undefined,
-          limitPerItem: 10
-        })
+          bulkPreference,
+          zipCode: zipCode || undefined,
+          limitPerItem: 10,
+        }),
       });
-      const data = (await response.json()) as SearchProductsResponse & { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Search failed.");
-
-      setResults(data.items);
-      setIsPaid(data.entitlement.isPaid);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Search failed.", "error");
-    } finally {
-      setIsSearching(false);
-    }
-  }
-
-  async function saveCurrentList() {
-    if (!accessToken) return;
-    const response = await fetch("/api/lists", {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ name: `Grocery list ${new Date().toLocaleDateString()}`, items })
-    });
-    const data = (await response.json()) as { error?: string };
-    if (!response.ok) {
-      notify(data.error ?? "Saved lists error.", "error");
-      return;
-    }
-    notify("List saved successfully!", "success");
-    await loadLists();
-  }
-
-  async function loadLists() {
-    if (!accessToken) return;
-    const response = await fetch("/api/lists", {
-      headers: { authorization: `Bearer ${accessToken}` }
-    });
-    const data = (await response.json()) as { lists?: ListRecord[]; error?: string };
-    if (!response.ok) {
-      notify(data.error ?? "Saved lists error.", "error");
-      return;
-    }
-    setLists(data.lists ?? []);
-    setShowLists(true);
-  }
-
-  async function markBought(query: string, product: RankedProduct) {
-    if (!accessToken) return;
-    const response = await fetch("/api/bought-products", {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({
-        query,
-        product: {
-          provider: product.provider,
-          providerProductId: product.providerProductId,
-          upc: product.upc,
-          title: product.title,
-          brand: product.brand,
-          estimatedPrice: product.estimatedPrice,
-          imageUrl: product.imageUrl,
-          productUrl: product.productUrl
+      await consumeSearch(response, (event) => {
+        if (controller.signal.aborted || requestRef.current !== controller)
+          return;
+        if (event.type === "meta") setMessage(event.disclaimer);
+        if (event.type === "item") {
+          const key = normalizeQuery(event.item.query);
+          setResults((current) =>
+            current.map((row) =>
+              normalizeQuery(row.query) === key ? event.item : row,
+            ),
+          );
+          setPendingQueries((current) =>
+            current.filter((query) => query !== key),
+          );
+          if (event.item.options.length)
+            setSelection(
+              (current) =>
+                current ?? {
+                  query: event.item.query,
+                  product: event.item.options[0],
+                },
+            );
         }
-      })
-    });
-    const data = (await response.json()) as { error?: string };
-    if (response.ok) {
-      setBoughtIds((prev) => new Set([...prev, product.providerProductId]));
-      notify("Marked as bought! 🛒", "success");
-    } else {
-      notify(data.error ?? "Couldn't record that. Try again.", "error");
+      });
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setResults((current) =>
+          current.map((row) =>
+            !row.options.length && !row.error
+              ? {
+                  ...row,
+                  error: "Search did not finish for this item. Please retry.",
+                }
+              : row,
+          ),
+        );
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Search failed. Please try again.",
+        );
+      }
+    } finally {
+      if (requestRef.current === controller) {
+        setPendingQueries([]);
+        requestRef.current = null;
+      }
     }
   }
+  function select(query: string, product: RankedProduct) {
+    setSelection({ query, product });
+    setOverlay(
+      window.matchMedia("(min-width: 1200px)").matches ? null : "detail",
+    );
+  }
+  function showOptions(query: string) {
+    setOptionQuery(query);
+    setSort("match");
+    setOverlay("options");
+  }
+  function openList(list: SavedList) {
+    clearResults();
+    setName(list.name);
+    setItems(
+      (list.grocery_list_items || [])
+        .filter((item) => item.is_active)
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((item) => item.query),
+    );
+    setChecked([]);
+    setQuickMode(false);
+  }
+  async function loadLists() {
+    setOverlay("lists");
+    await perform(async () => {
+      if (!session) throw new Error("Sign in to access saved lists.");
+      const data = await api("/api/lists");
+      setLists(data.lists || []);
+    });
+  }
+  async function markBought() {
+    if (!selection) return;
+    const { query, product } = selection;
+    await perform(async () => {
+      if (!session) throw new Error("Sign in to record purchases.");
+      await api("/api/bought-products", "POST", { query, product });
+      setBought((current) => [...current, productKey(product)]);
+      setChecked((current) => [
+        ...new Set([...current, normalizeQuery(query)]),
+      ]);
+      setMessage("Purchase recorded.");
+    });
+  }
+  const options = [
+    ...(results.find(
+      (row) => normalizeQuery(row.query) === normalizeQuery(optionQuery),
+    )?.options || []),
+  ].sort((a, b) =>
+    sort === "price"
+      ? (a.estimatedPrice ?? Infinity) - (b.estimatedPrice ?? Infinity)
+      : sort === "nutrition"
+        ? (b.health.classification === "unknown" ? -1 : b.scoreParts.health) -
+          (a.health.classification === "unknown" ? -1 : a.scoreParts.health)
+        : b.overallScore - a.overallScore,
+  );
+  const detail = selection && (
+    <ProductDetail
+      key={productKey(selection.product)}
+      product={selection.product}
+      allergies={allergies}
+      bought={bought.includes(productKey(selection.product))}
+      busy={busy}
+      onBought={markBought}
+      onOptions={() => showOptions(selection.query)}
+    />
+  );
+  const navigation = (
+    <>
+      <button
+        className={!quickMode ? "active" : ""}
+        aria-current={!quickMode ? "page" : undefined}
+        onClick={() => switchMode(false)}
+      >
+        <List size={21} />
+        <span>Grocery list</span>
+      </button>
+      <button
+        className={quickMode ? "active" : ""}
+        aria-current={quickMode ? "page" : undefined}
+        onClick={() => switchMode(true)}
+      >
+        <Search size={21} />
+        <span>Quick lookup</span>
+      </button>
+      <button onClick={() => setOverlay("preferences")}>
+        <SlidersHorizontal size={21} />
+        <span>Preferences</span>
+        {dietModes.length + allergies.length > 0 && (
+          <span className="count">{dietModes.length + allergies.length}</span>
+        )}
+      </button>
+      <button onClick={loadLists}>
+        <FolderOpen size={21} />
+        <span>Saved lists</span>
+      </button>
+    </>
+  );
 
   return (
-    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-10 bg-[#FBFBFD] text-[#1D1D1F]">
-      <div className="mx-auto max-w-7xl">
-
-        {/* ── Apple-inspired Glass Header ── */}
-        <header className="sticky top-0 z-40 relative flex flex-col gap-4 overflow-hidden rounded-[2rem] border border-black/[0.05] apple-glass p-4 shadow-sm md:flex-row md:items-center md:justify-between">
-          <div className="relative flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#166534] text-white shadow-md shadow-[#166534]/20">
-              <BroccoliBiteLogo className="h-7 w-7 text-white" />
-            </div>
-            <div>
-              <p className="flex items-center gap-1.5 text-xs font-bold tracking-tight text-[#166534]">
-                The Good Bite
-              </p>
-              <h1 className="font-heading text-xl font-bold tracking-tight text-[#1D1D1F] sm:text-2xl">
-                Healthy picks, honest prices.
-              </h1>
-            </div>
+    <div className="app-shell">
+      <a href="#groceries" className="skip-link">
+        Skip to grocery list
+      </a>
+      <aside className="sidebar">
+        <MeezanyLogo />
+        <nav aria-label="Main navigation">{navigation}</nav>
+        <div className="sidebar-lists">
+          <p className="eyebrow">YOUR LIST</p>
+          <button className="current-list" onClick={() => switchMode(false)}>
+            <List size={18} />
+            <span>{name}</span>
+          </button>
+          <button
+            className="text-button"
+            onClick={() => {
+              clearResults();
+              setItems([]);
+              setName("My grocery list");
+              setChecked([]);
+              setQuickMode(false);
+            }}
+          >
+            <Plus size={19} />
+            Create new list
+          </button>
+        </div>
+        <div className="brand-note">
+          <img
+            src="/brand/meezany-peel.png"
+            alt="An orange peel curled into the Meezany ribbon"
+          />
+          <h3>
+            Better groceries,
+            <br />
+            without the homework.
+          </h3>
+          <p>A little clarity for every aisle.</p>
+        </div>
+      </aside>
+      <div className="workspace">
+        <header className="topbar">
+          <div className="mobile-brand">
+            <MeezanyLogo />
           </div>
-
-          {/* Controls & Mode Toggles */}
-          <div className="relative flex flex-wrap items-center gap-2">
-            {/* Quick Lookup vs List Mode Toggle */}
+          <p className="desktop-tagline">A better pick starts here.</p>
+          <div className="topbar-actions">
             <button
-              onClick={() => setQuickMode(!quickMode)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold transition-all border",
-                quickMode
-                  ? "bg-[#166534] text-white border-[#166534] shadow-sm"
-                  : "bg-[#F5F5F7] text-[#1D1D1F] border-black/[0.06] hover:bg-black hover:text-white"
-              )}
+              className="location-button"
+              onClick={() => setOverlay("preferences")}
             >
-              <Zap className="h-3.5 w-3.5" />
-              <span>{quickMode ? "Quick Mode" : "Grocery List"}</span>
+              <MapPin size={16} />
+              {zipCode || "Set ZIP code"}
+              <ChevronDown size={14} />
             </button>
-
-            {signedIn ? (
-              <>
-                <span className="flex items-center gap-1.5 rounded-full bg-[#F5F5F7] px-3.5 py-2 text-xs font-semibold text-[#1D1D1F] border border-black/[0.04]">
-                  {demoMode ? (
-                    <><Sparkles className="h-3.5 w-3.5 text-[#34C759]" /> Free Tier</>
-                  ) : (
-                    <><Check className="h-3.5 w-3.5 text-[#34C759]" /> {session?.user.email}</>
-                  )}
-                </span>
-                <button
-                  className="flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-[#F5F5F7] px-3.5 py-2 text-xs font-semibold text-[#1D1D1F] transition hover:bg-black hover:text-white"
-                  onClick={signOut}
-                  id="sign-out-btn"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  Sign out
-                </button>
-              </>
-            ) : (
-              <AuthControls
-                email={email}
-                setEmail={setEmail}
-                signInWithGoogle={signInWithGoogle}
-                sendMagicLink={sendMagicLink}
-                supabase={supabase}
-                showMagicLink={showMagicLink}
-                setShowMagicLink={setShowMagicLink}
-              />
-            )}
+            <button
+              className="avatar"
+              aria-label="Account"
+              title="Account"
+              onClick={() => setOverlay("account")}
+            >
+              {session?.user.email?.slice(0, 1).toUpperCase() || (
+                <User size={19} />
+              )}
+            </button>
           </div>
         </header>
-
-        {/* ── Toast notification ── */}
-        {message && (
-          <div
-            className={cn(
-              "fade-in mt-4 flex items-center justify-between gap-3 rounded-2xl px-5 py-3.5 text-sm font-semibold shadow-sm",
-              message.type === "success" && "border border-emerald-200 bg-emerald-50 text-emerald-900",
-              message.type === "error"   && "border border-red-200   bg-red-50   text-red-900",
-              message.type === "info"    && "border border-amber-200  bg-amber-50  text-amber-900"
-            )}
-            role="alert"
-          >
-            <span>{message.text}</span>
-            <button onClick={() => setMessage(null)} className="shrink-0 rounded-full p-1 opacity-60 hover:opacity-100">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-
-        {/* ── Allergy Mandatory Disclaimer Banner (if any allergy selected) ── */}
-        {allergies.length > 0 && (
-          <div className="mt-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3 text-amber-900 text-xs">
-            <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold">⚠️ Allergy Safety Disclaimer: </span>
-              Allergy information is derived automatically from product datasets for general guidance only.
-              Always inspect physical product packaging and labels before consuming.
+        <div className="workspace-columns">
+          <main id="groceries" className="grocery-pane">
+            <div className="page-heading">
+              <div>
+                <h1>{quickMode ? "What’s the better pick?" : name}</h1>
+                <p>
+                  {quickMode
+                    ? "Look up one item. Explore your options."
+                    : `${items.length} items · Better picks for your everyday shop`}
+                </p>
+              </div>
+              {!quickMode && (
+                <button
+                  className="secondary-button"
+                  disabled={searching || !items.length}
+                  onClick={() => setOverlay("save")}
+                >
+                  Save list
+                </button>
+              )}
             </div>
-          </div>
-        )}
-
-        {/* ── Main layout ── */}
-        <section className="mt-6 grid gap-5 lg:grid-cols-[380px_1fr]">
-
-          {/* ── Sidebar: Grocery list editor + preferences + diet modes ── */}
-          <aside className="h-fit space-y-4">
-
-            {/* Location / ZIP Code Card */}
-            <div className="rounded-[2rem] border border-stone-200/80 bg-white p-4 shadow-sm shadow-stone-900/5">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-[#166534]" />
-                  <span className="text-xs font-bold text-[#1D1D1F]">Store ZIP Code (Optional)</span>
-                </div>
-                {zipCode.length === 5 && (
-                  <span className="text-[10px] font-bold text-[#166534] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    📍 {zipCode}
-                  </span>
+            <form
+              className="item-entry"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (quickMode) void searchProducts();
+                else addItems();
+              }}
+            >
+              <Search size={19} />
+              {quickMode ? (
+                <input
+                  aria-label="Quick lookup"
+                  placeholder="Try Greek yogurt, cereal, olive oil…"
+                  value={quickQuery}
+                  maxLength={160}
+                  onChange={(e) => setQuickQuery(e.target.value)}
+                />
+              ) : (
+                <textarea
+                  aria-label="Add grocery items"
+                  rows={1}
+                  placeholder="Add an item, or paste your grocery list…"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      addItems();
+                    }
+                  }}
+                />
+              )}
+              <button
+                className="primary-button"
+                disabled={
+                  quickMode ? searching || !quickQuery.trim() : !input.trim()
+                }
+                type="submit"
+              >
+                {quickMode ? <Search size={17} /> : <Plus size={18} />}
+                {quickMode ? "Find" : "Add"}
+              </button>
+            </form>
+            <div className="list-toolbar">
+              <button
+                className="text-button"
+                onClick={() => setOverlay("preferences")}
+              >
+                <SlidersHorizontal size={16} />
+                {dietModes.length + allergies.length
+                  ? `${dietModes.length + allergies.length} preference${dietModes.length + allergies.length === 1 ? "" : "s"}`
+                  : "Make it yours"}
+              </button>
+              <div>
+                {!quickMode && (
+                  <>
+                    <button
+                      className="text-button"
+                      aria-pressed={editing}
+                      disabled={searching}
+                      onClick={() => setEditing(!editing)}
+                    >
+                      {editing ? "Done editing" : "Edit list"}
+                    </button>
+                    <button
+                      className="primary-button"
+                      disabled={searching || !items.length}
+                      onClick={() => void searchProducts()}
+                    >
+                      {searching ? (
+                        <Loader2 className="spin" size={16} />
+                      ) : (
+                        <Search size={16} />
+                      )}
+                      {searching ? "Finding options…" : "Find better options"}
+                    </button>
+                  </>
                 )}
               </div>
-              <div className="mt-2.5 flex items-center gap-2">
-                <input
-                  type="text"
-                  maxLength={5}
-                  value={zipCode}
-                  onChange={(e) => handleZipChange(e.target.value.replace(/\D/g, ""))}
-                  placeholder="e.g. 10001 (USA)"
-                  className="w-full rounded-xl border border-stone-200 bg-[#F5F5F7] px-3 py-2 text-xs font-semibold text-[#1D1D1F] placeholder:text-stone-400 outline-none focus:border-[#166534]"
-                />
-              </div>
             </div>
-
-            {/* List Editor Card (or Quick Mode indicator) */}
-            {!quickMode ? (
-              <div className="rounded-[2rem] border border-stone-200/80 bg-white p-5 shadow-sm shadow-stone-900/5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-black text-stone-950">Grocery list</h2>
-                    <p className="mt-0.5 text-xs font-medium text-stone-500">
-                      Add items one by one, or paste a list.
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-700">
-                    {items.length} item{items.length !== 1 ? "s" : ""}
-                  </span>
-                </div>
-
-                <div className="mt-4 flex gap-2">
-                  <input
-                    id="grocery-item-input"
-                    value={itemInput}
-                    onChange={(event) => setItemInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") addItems(itemInput);
-                    }}
-                    placeholder="e.g. mac and cheese, chips…"
-                    className="min-w-0 flex-1 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-semibold text-stone-900 placeholder:text-stone-400 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                  />
-                  <button
-                    id="add-item-btn"
-                    className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-300/40 transition hover:from-emerald-600 hover:to-emerald-800 active:scale-95"
-                    onClick={() => addItems(itemInput)}
-                    aria-label="Add grocery item"
-                  >
-                    <Plus className="h-5 w-5" />
-                  </button>
-                </div>
-
-                <div className="mt-3 space-y-1.5">
-                  {items.length === 0 && (
-                    <p className="rounded-2xl bg-stone-50 px-4 py-3 text-center text-xs font-semibold text-stone-400">
-                      Add your first grocery item above
-                    </p>
-                  )}
-                  {items.map((item, index) => (
-                    <div
-                      key={`${item}-${index}`}
-                      className="group flex items-center gap-1.5 rounded-2xl bg-stone-50 p-2 transition hover:bg-emerald-50/50"
-                    >
-                      <span className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-200 text-xs font-black text-stone-600">
-                        {index + 1}
-                      </span>
-                      <span className="flex-1 truncate px-1 text-sm font-bold capitalize text-stone-800">{item}</span>
-                      <button
-                        className="rounded-full p-1.5 text-stone-400 transition hover:bg-white hover:text-stone-700"
-                        onClick={() => moveItem(index, -1)}
-                        aria-label="Move up"
-                      >
-                        <ChevronLeft className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        className="rounded-full p-1.5 text-stone-400 transition hover:bg-white hover:text-stone-700"
-                        onClick={() => moveItem(index, 1)}
-                        aria-label="Move down"
-                      >
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        className="rounded-full p-1.5 text-stone-300 transition hover:bg-red-50 hover:text-red-500"
-                        onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                        aria-label="Remove item"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Actions */}
-                <div className="mt-5 grid gap-2">
-                  <button
-                    id="search-btn"
-                    className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-stone-900 to-stone-800 px-4 py-3.5 font-black text-white shadow-md transition hover:from-stone-800 hover:to-stone-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-                    onClick={() => searchProducts()}
-                    disabled={isSearching || !signedIn || items.length === 0}
-                  >
-                    {isSearching ? (
-                      <><Loader2 className="h-5 w-5 animate-spin" /> Searching…</>
-                    ) : (
-                      <><Search className="h-5 w-5" /> Search products</>
-                    )}
-                  </button>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      id="save-list-btn"
-                      className="flex items-center justify-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-bold text-stone-700 transition hover:bg-stone-50 hover:border-stone-300"
-                      onClick={saveCurrentList}
-                      disabled={!signedIn}
-                    >
-                      Save list
-                    </button>
-                    <button
-                      id="saved-lists-btn"
-                      className="flex items-center justify-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-bold text-stone-700 transition hover:bg-stone-50 hover:border-stone-300"
-                      onClick={loadLists}
-                      disabled={!signedIn}
-                    >
-                      Saved lists
-                    </button>
-                  </div>
-                </div>
+            {message && (
+              <div className="status-message" role="status">
+                <span>{message}</span>
+                <button
+                  className="icon-button"
+                  aria-label="Dismiss message"
+                  onClick={() => setMessage("")}
+                >
+                  <X size={16} />
+                </button>
               </div>
-            ) : (
-              <div className="rounded-[2rem] border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
-                <h3 className="font-bold text-emerald-900 text-sm flex items-center gap-1.5">
-                  <Zap className="w-4 h-4 text-emerald-600" />
-                  <span>Quick Lookup Mode Active</span>
-                </h3>
-                <p className="text-xs text-stone-600 mt-1">
-                  Type any food item in the single search bar on the right for instant ranking.
+            )}
+            {stale && (
+              <p className="notice">
+                Preferences changed. Search again to update your options.
+              </p>
+            )}
+            {allergies.length > 0 && (
+              <p className="fine-print allergy-note">
+                Allergen information can be incomplete. Always check the package
+                before buying or eating.
+              </p>
+            )}
+            <div className="grocery-list" aria-busy={searching}>
+              {visibleQueries.map((query, index) => {
+                const key = normalizeQuery(query);
+                const result = results.find(
+                  (row) => normalizeQuery(row.query) === key,
+                );
+                const best = result?.options[0];
+                const loading = pendingQueries.includes(key);
+                const complete = checked.includes(key);
+                return (
+                  <article
+                    className={`grocery-row ${selection && normalizeQuery(selection.query) === key ? "selected" : ""} ${complete ? "completed" : ""}`}
+                    key={key}
+                    onDragOver={editing ? (e) => e.preventDefault() : undefined}
+                    onDrop={
+                      editing
+                        ? (e) => {
+                            e.preventDefault();
+                            const from = Number(
+                              e.dataTransfer.getData("text/meezany-index"),
+                            );
+                            if (
+                              Number.isInteger(from) &&
+                              from >= 0 &&
+                              from < items.length
+                            )
+                              moveItem(from, index);
+                          }
+                        : undefined
+                    }
+                  >
+                    <button
+                      className={`item-check ${complete ? "is-checked" : ""}`}
+                      aria-label={`${complete ? "Uncheck" : "Check off"} ${query}`}
+                      aria-pressed={complete}
+                      onClick={() =>
+                        setChecked((current) =>
+                          complete
+                            ? current.filter((q) => q !== key)
+                            : [...current, key],
+                        )
+                      }
+                    >
+                      {complete && <Check size={16} />}
+                    </button>
+                    <div className="row-summary">
+                      <button
+                        className="row-title"
+                        disabled={!best || loading}
+                        onClick={() => best && select(query, best)}
+                      >
+                        {query}
+                      </button>
+                      <p>
+                        {loading ? (
+                          <>
+                            <Loader2 size={13} className="spin" />
+                            Finding your options…
+                          </>
+                        ) : result?.error ? (
+                          <span className="error-text">{result.error}</span>
+                        ) : best ? (
+                          <>
+                            Best match · {priceLabel(best)}{" "}
+                            <ScoreBadge product={best} />
+                          </>
+                        ) : result ? (
+                          "No matching products found"
+                        ) : (
+                          "Ready to find your better pick"
+                        )}
+                      </p>
+                    </div>
+                    {best && !loading ? (
+                      <div className="product-strip">
+                        {result!.options.slice(0, 3).map((product) => (
+                          <button
+                            key={productKey(product)}
+                            className={`product-thumb ${selection && productKey(selection.product) === productKey(product) ? "chosen" : ""}`}
+                            onClick={() => select(query, product)}
+                            aria-label={`View ${product.title}, ${priceLabel(product)}`}
+                          >
+                            <ProductImage product={product} />
+                            <span>{priceLabel(product)}</span>
+                          </button>
+                        ))}
+                        <button
+                          className="more-options"
+                          onClick={() => showOptions(query)}
+                          aria-label={`See all ${result!.options.length} options for ${query}`}
+                        >
+                          {result!.options.length > 3
+                            ? `+${result!.options.length - 3}`
+                            : "All"}
+                        </button>
+                      </div>
+                    ) : (
+                      <span
+                        className={`row-placeholder ${loading ? "loading" : ""}`}
+                      >
+                        {loading
+                          ? "Comparing products"
+                          : "Nutrition · price · preferences"}
+                      </span>
+                    )}
+                    {best && (
+                      <button
+                        className="icon-button row-chevron"
+                        aria-label={`Options for ${query}`}
+                        onClick={() => showOptions(query)}
+                      >
+                        <ChevronRight size={19} />
+                      </button>
+                    )}
+                    {result?.warnings?.length ? (
+                      <p className="row-warning">{result.warnings.join(" ")}</p>
+                    ) : null}
+                    {editing && !quickMode && (
+                      <div className="row-edit">
+                        <span
+                          draggable
+                          onDragStart={(e) =>
+                            e.dataTransfer.setData(
+                              "text/meezany-index",
+                              String(index),
+                            )
+                          }
+                          title="Drag to reorder"
+                        >
+                          <GripVertical size={18} />
+                        </span>
+                        <button
+                          className="icon-button"
+                          disabled={index === 0}
+                          aria-label={`Move ${query} up`}
+                          onClick={() => moveItem(index, index - 1)}
+                        >
+                          <ArrowUp size={16} />
+                        </button>
+                        <button
+                          className="icon-button"
+                          disabled={index === items.length - 1}
+                          aria-label={`Move ${query} down`}
+                          onClick={() => moveItem(index, index + 1)}
+                        >
+                          <ArrowDown size={16} />
+                        </button>
+                        <button
+                          className="icon-button"
+                          aria-label={`Remove ${query}`}
+                          onClick={() => {
+                            setItems(items.filter((q) => q !== query));
+                            setResults(
+                              results.filter(
+                                (r) => normalizeQuery(r.query) !== key,
+                              ),
+                            );
+                            if (
+                              selection &&
+                              normalizeQuery(selection.query) === key
+                            )
+                              setSelection(null);
+                            setChecked(checked.filter((q) => q !== key));
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+            {visibleQueries.length === 0 && (
+              <div className="empty-list">
+                <List size={32} />
+                <h2>
+                  {quickMode
+                    ? "One item. A little more clarity."
+                    : "Good things start with a list."}
+                </h2>
+                <p>
+                  {quickMode
+                    ? "Search above to compare products, nutrition, and prices."
+                    : "Type a few groceries above, or paste a list with commas or line breaks."}
                 </p>
               </div>
             )}
-
-            {/* Allergen Filters Card */}
-            <div className="rounded-[2rem] border border-stone-200/80 bg-white p-5 shadow-sm shadow-stone-900/5">
-              <div className="mb-3">
-                <h3 className="font-black text-stone-950 text-sm">Allergy Filters</h3>
-                <p className="text-xs font-medium text-stone-500 mt-0.5">Penalizes products containing selected allergens.</p>
+            <p className="list-footnote">
+              {results.length
+                ? "Prices are estimates. Availability and product information may vary."
+                : "Your list, your preferences. We’ll help with the labels."}
+            </p>
+          </main>
+          <aside className="detail-pane" aria-label="Product details">
+            {detail || (
+              <div className="detail-welcome">
+                <img src="/brand/meezany-peel.png" alt="" />
+                <p className="eyebrow">PEEL BACK THE LABELS</p>
+                <h2>
+                  Same aisle.
+                  <br />
+                  Better choices.
+                </h2>
+                <p>
+                  Find options for your list, then choose a product to see
+                  what’s inside.
+                </p>
+                <div className="welcome-step">
+                  <span>1</span>Add your everyday groceries
+                </div>
+                <div className="welcome-step">
+                  <span>2</span>Make your preferences known
+                </div>
+                <div className="welcome-step">
+                  <span>3</span>Find your better pick
+                  <ArrowRight size={16} />
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {ALLERGENS.map((allergen) => {
-                  const info = ALLERGEN_DETAILS[allergen];
-                  const active = allergies.includes(allergen);
-                  return (
-                    <button
-                      key={allergen}
-                      onClick={() => toggleAllergen(allergen)}
-                      className={cn(
-                        "flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border transition",
-                        active
-                          ? "bg-rose-600 text-white border-rose-600 shadow-sm"
-                          : "bg-white text-stone-700 border-stone-200 hover:bg-stone-50"
-                      )}
-                    >
-                      <span>{info.icon}</span>
-                      <span>{info.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Diet Mode Card */}
-            <div className="rounded-[2rem] border border-stone-200/80 bg-white p-5 shadow-sm shadow-stone-900/5">
-              <div className="mb-3">
-                <h3 className="font-black text-stone-950 text-sm">Diet Modes & Packs</h3>
-                <p className="text-xs font-medium text-stone-500 mt-0.5">Filter by nutritional goals or diets.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {DIET_MODES.map((mode) => (
-                  <button
-                    key={mode}
-                    id={`diet-mode-${mode}`}
-                    onClick={() => toggleDietMode(mode)}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition",
-                      dietModes.includes(mode)
-                        ? "border-[#166534] bg-[#166534] text-white shadow-sm"
-                        : "border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50"
-                    )}
-                  >
-                    <span>{DIET_ICONS[mode]}</span>
-                    <span>{DIET_LABELS[mode]}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
+            )}
           </aside>
-
-          {/* ── Results area ── */}
-          <section className="min-w-0 space-y-5">
-            {/* Single Quick Lookup Search Bar when in Quick Mode */}
-            {quickMode && (
-              <div className="rounded-[2rem] border border-stone-200 bg-white p-4 shadow-md">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (quickQuery.trim()) searchProducts([quickQuery.trim()]);
-                  }}
-                  className="flex gap-2"
-                >
-                  <div className="relative flex-1">
-                    <Search className="absolute left-4 top-3.5 h-5 w-5 text-stone-400" />
-                    <input
-                      type="text"
-                      value={quickQuery}
-                      onChange={(e) => setQuickQuery(e.target.value)}
-                      placeholder="Quick search any grocery product (e.g. 'almond milk', 'greek yogurt')..."
-                      className="w-full rounded-2xl border border-stone-200 bg-[#F5F5F7] pl-11 pr-4 py-3 text-sm font-semibold text-stone-900 placeholder:text-stone-400 outline-none focus:border-[#166534]"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isSearching || !quickQuery.trim()}
-                    className="px-6 py-3 rounded-2xl bg-[#166534] hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition disabled:opacity-50"
-                  >
-                    {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : "Search"}
-                  </button>
-                </form>
-              </div>
-            )}
-
-            {!signedIn ? (
-              <SignInPrompt signInWithGoogle={signInWithGoogle} supabase={supabase} showMagicLink={showMagicLink} setShowMagicLink={setShowMagicLink} email={email} setEmail={setEmail} sendMagicLink={sendMagicLink} />
-            ) : results.length === 0 ? (
-              <EmptyState isSearching={isSearching} itemCount={quickMode ? 1 : items.length} />
-            ) : (
-              results.map((item, i) => (
-                <div key={item.query} className="fade-in" style={{ animationDelay: `${i * 60}ms` }}>
-                  <ProductCarousel
-                    item={item}
-                    isPaid={isPaid}
-                    markBought={markBought}
-                    boughtIds={boughtIds}
-                    selectedAllergies={allergies}
-                    onSelectProduct={setSelectedProduct}
-                  />
-                </div>
-              ))
-            )}
-
-            {/* Disclaimer */}
-            {results.length > 0 && (
-              <p className="px-2 text-xs font-medium text-stone-400">
-                Prices are estimates from shopping results, not confirmed local shelf prices.
-                Open Food Facts data may have gaps; nutrition signals are informational only.
-              </p>
-            )}
-          </section>
-        </section>
-
-        {/* ── Yuka-Style Expanded Detail Modal ── */}
-        <ProductDetailModal
-          product={selectedProduct}
-          onClose={() => setSelectedProduct(null)}
-          isBought={selectedProduct ? boughtIds.has(selectedProduct.providerProductId) : false}
-          onToggleBought={(id) => {
-            if (selectedProduct) markBought(selectedProduct.title, selectedProduct);
-          }}
-          selectedAllergies={allergies}
-        />
-
-        {/* ── Saved lists drawer ── */}
-        {showLists && (
-          <div
-            className="fixed inset-0 z-50 bg-stone-950/40 p-4 backdrop-blur-sm"
-            onClick={() => setShowLists(false)}
-          >
-            <div
-              className="ml-auto h-full max-w-sm overflow-auto rounded-[2rem] bg-white p-5 shadow-2xl"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black text-stone-900">Saved lists</h2>
-                <button
-                  className="rounded-full bg-stone-100 p-2 text-stone-600 transition hover:bg-stone-200"
-                  onClick={() => setShowLists(false)}
-                  aria-label="Close saved lists"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="mt-4 space-y-2">
-                {lists.length === 0 ? (
-                  <p className="rounded-2xl bg-stone-50 p-4 text-center text-sm font-semibold text-stone-400">
-                    No saved lists yet. Save your first list!
-                  </p>
-                ) : (
-                  lists.map((list) => (
-                    <button
-                      key={list.id}
-                      className="w-full rounded-2xl border border-stone-200 bg-stone-50 p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50/50"
-                      onClick={() => {
-                        const nextItems =
-                          list.grocery_list_items
-                            ?.filter((item) => item.is_active)
-                            .sort((a, b) => a.sort_order - b.sort_order)
-                            .map((item) => item.query) ?? [];
-                        if (nextItems.length) setItems(nextItems);
-                        setShowLists(false);
-                        notify(`Loaded list: ${list.name}`, "success");
-                      }}
-                    >
-                      <div className="font-black text-stone-900">{list.name}</div>
-                      <div className="mt-1 text-xs font-semibold text-stone-500">
-                        {list.grocery_list_items?.length ?? 0} item{(list.grocery_list_items?.length ?? 0) !== 1 ? "s" : ""}
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
-    </main>
-  );
-}
-
-/* ── Auth controls (header, signed-out state) ── */
-function AuthControls(props: {
-  email: string;
-  setEmail: (value: string) => void;
-  signInWithGoogle: () => void;
-  sendMagicLink: () => void;
-  supabase: SupabaseClient | null;
-  showMagicLink: boolean;
-  setShowMagicLink: (v: boolean) => void;
-}) {
-  if (!props.supabase) {
-    return <span className="rounded-full bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 ring-1 ring-emerald-200">Demo active</span>;
-  }
-
-  return (
-    <div className="flex flex-col gap-2 sm:flex-row">
-      <button
-        id="google-sign-in-btn"
-        className="flex items-center gap-2 rounded-full bg-[#1D1D1F] px-4 py-2 text-xs font-black text-white transition hover:bg-black"
-        onClick={props.signInWithGoogle}
-      >
-        <svg className="h-4 w-4" viewBox="0 0 24 24">
-          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-        </svg>
-        Sign in with Google
-      </button>
-      <button
-        className="flex items-center gap-1.5 rounded-full border border-stone-200 px-3.5 py-2 text-xs font-bold text-stone-600 transition hover:bg-stone-50"
-        onClick={() => props.setShowMagicLink(!props.showMagicLink)}
-      >
-        Email link
-      </button>
-      {props.showMagicLink && (
-        <div className="flex gap-2">
-          <input
-            id="magic-link-email-input"
-            value={props.email}
-            onChange={(event) => props.setEmail(event.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") props.sendMagicLink(); }}
-            placeholder="you@example.com"
-            type="email"
-            className="w-44 rounded-full border border-stone-200 px-3.5 py-2 text-xs font-semibold outline-none focus:border-emerald-500"
-          />
-          <button
-            id="send-magic-link-btn"
-            className="rounded-full bg-stone-100 px-3.5 py-2 text-xs font-black text-stone-700 transition hover:bg-stone-200"
-            onClick={props.sendMagicLink}
+      <nav className="mobile-nav" aria-label="Mobile navigation">
+        {navigation}
+      </nav>
+      {overlay === "preferences" && (
+        <Sheet title="Preferences" onClose={() => setOverlay(null)}>
+          <p className="sheet-intro">
+            A few preferences. More useful recommendations.
+          </p>
+          <h3>Diet & goals</h3>
+          {DIET_MODES.map((mode) => (
+            <label className="switch-row" key={mode}>
+              <span>{DIET_LABELS[mode]}</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={dietModes.includes(mode)}
+                onChange={() =>
+                  setDietModes((current) =>
+                    current.includes(mode)
+                      ? current.filter((d) => d !== mode)
+                      : [...current, mode],
+                  )
+                }
+              />
+              <span className="switch" />
+            </label>
+          ))}
+          <h3>Allergies & avoid</h3>
+          {ALLERGENS.map((allergen) => (
+            <label className="switch-row" key={allergen}>
+              <span>{ALLERGEN_DETAILS[allergen].label}</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={allergies.includes(allergen)}
+                onChange={() =>
+                  setAllergies((current) =>
+                    current.includes(allergen)
+                      ? current.filter((a) => a !== allergen)
+                      : [...current, allergen],
+                  )
+                }
+              />
+              <span className="switch" />
+            </label>
+          ))}
+          <p className="fine-print">
+            Data can be inaccurate or incomplete. Always verify allergens on the
+            package. FODMAP is beta.
+          </p>
+          <h3>Price & shopping</h3>
+          <label className="field-label" htmlFor="bulk-preference">
+            Package preference
+          </label>
+          <select
+            id="bulk-preference"
+            className="text-input"
+            value={bulkPreference}
+            onChange={(e) =>
+              setBulkPreference(e.target.value as "everyday" | "bulk" | "any")
+            }
           >
-            Send
+            <option value="everyday">Prefer everyday sizes</option>
+            <option value="bulk">Prefer bulk & multipacks</option>
+            <option value="any">Show all sizes equally</option>
+          </select>
+          <p className="fine-print">
+            Prices are compared per unit when package sizes are known.
+          </p>
+          <h3>Location</h3>
+          <label className="field-label" htmlFor="zip">
+            USA ZIP code (optional)
+          </label>
+          <input
+            id="zip"
+            className="text-input"
+            inputMode="numeric"
+            autoComplete="postal-code"
+            placeholder="e.g. 01752"
+            value={zipCode}
+            maxLength={5}
+            onChange={(e) => setZipCode(e.target.value.replace(/\D/g, ""))}
+          />
+          <p className="fine-print">
+            Helps guide search. Prices are estimates, not confirmed local shelf
+            prices.
+          </p>
+          <button
+            className="primary-button full-width"
+            onClick={() => setOverlay(null)}
+          >
+            Done
           </button>
-        </div>
+        </Sheet>
       )}
-    </div>
-  );
-}
-
-/* ── Full-page sign-in prompt for unauthenticated users ── */
-function SignInPrompt(props: {
-  signInWithGoogle: () => void;
-  supabase: SupabaseClient | null;
-  showMagicLink: boolean;
-  setShowMagicLink: (v: boolean) => void;
-  email: string;
-  setEmail: (v: string) => void;
-  sendMagicLink: () => void;
-}) {
-  return (
-    <div className="grid min-h-[32rem] place-items-center rounded-[2rem] border border-emerald-100 bg-gradient-to-br from-white to-emerald-50/60 p-8 text-center shadow-sm backdrop-blur-sm">
-      <div className="max-w-md">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-[#166534] text-white shadow-xl shadow-[#166534]/30">
-          <ShoppingBasket className="h-10 w-10" />
-        </div>
-        <h2 className="mt-6 text-3xl font-black text-stone-950">Make healthier grocery choices</h2>
-        <p className="mx-auto mt-3 max-w-sm font-semibold text-stone-500">
-          Enter your grocery list to get ranked healthy product options with estimated prices, diet fit, and Yuka-style nutrition signals.
-        </p>
-        <div className="mt-8 flex flex-col items-center gap-3">
-          {props.supabase ? (
+      {overlay === "account" && (
+        <Sheet
+          title={session ? "Your account" : "Welcome to Meezany"}
+          onClose={() => setOverlay(null)}
+        >
+          {session ? (
             <>
+              <p>{session.user.email}</p>
               <button
-                id="hero-google-sign-in-btn"
-                className="flex w-full max-w-xs items-center justify-center gap-2.5 rounded-2xl bg-stone-950 px-6 py-3.5 font-black text-white shadow-md transition hover:bg-stone-800 active:scale-[0.98]"
-                onClick={props.signInWithGoogle}
+                className="secondary-button full-width"
+                disabled={busy}
+                onClick={() =>
+                  perform(async () => {
+                    const result = await supabase?.auth.signOut();
+                    if (result?.error) throw result.error;
+                    clearResults();
+                    setSession(null);
+                    setLists([]);
+                    setBought([]);
+                  })
+                }
               >
-                <svg className="h-5 w-5" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                </svg>
-                Continue with Google
+                <LogOut size={16} />
+                Sign out
               </button>
-              <button
-                className="text-xs font-semibold text-stone-500 underline-offset-2 hover:text-stone-700 hover:underline"
-                onClick={() => props.setShowMagicLink(!props.showMagicLink)}
-              >
-                Sign in with email link instead
-              </button>
-              {props.showMagicLink && (
-                <div className="flex w-full max-w-xs gap-2">
-                  <input
-                    value={props.email}
-                    onChange={(e) => props.setEmail(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") props.sendMagicLink(); }}
-                    placeholder="you@example.com"
-                    type="email"
-                    className="min-w-0 flex-1 rounded-2xl border border-stone-200 px-4 py-3 text-xs font-semibold outline-none focus:border-emerald-500"
-                  />
-                  <button
-                    className="rounded-2xl bg-stone-100 px-4 py-3 text-xs font-black text-stone-700 hover:bg-stone-200"
-                    onClick={props.sendMagicLink}
-                  >
-                    Send
-                  </button>
-                </div>
-              )}
             </>
           ) : (
-            <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-800">
-              Demo mode active — Search is fully available.
+            <>
+              <p className="sheet-intro">
+                Sign in to find better picks and save your grocery lists.
+              </p>
+              {supabase ? (
+                <>
+                  <button
+                    className="primary-button full-width"
+                    disabled={busy}
+                    onClick={() =>
+                      perform(async () => {
+                        const { error } = await supabase.auth.signInWithOAuth({
+                          provider: "google",
+                          options: { redirectTo: window.location.origin },
+                        });
+                        if (error) throw error;
+                      })
+                    }
+                  >
+                    Continue with Google
+                  </button>
+                  <div className="or-divider">or use email</div>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void perform(async () => {
+                        const { error } = await supabase.auth.signInWithOtp({
+                          email,
+                          options: { emailRedirectTo: window.location.origin },
+                        });
+                        if (error) throw error;
+                        setMessage("Magic link sent. Check your email.");
+                      });
+                    }}
+                  >
+                    <label className="field-label" htmlFor="email">
+                      Email address
+                    </label>
+                    <input
+                      className="text-input"
+                      id="email"
+                      type="email"
+                      autoComplete="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                    />
+                    <button
+                      className="secondary-button full-width"
+                      disabled={busy || !email}
+                    >
+                      Send sign-in link
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <p className="notice">
+                  Sign-in is not configured in this environment.{" "}
+                  {accessToken
+                    ? "Development search is available; saving lists and purchases requires an account."
+                    : "Please configure authentication to search and save lists."}
+                </p>
+              )}
+            </>
+          )}
+          {message && (
+            <p className="notice" role="status">
+              {message}
             </p>
           )}
-        </div>
-        <div className="mt-8 grid grid-cols-3 gap-4 border-t border-stone-100 pt-6 text-center">
-          {[
-            { icon: "🥗", label: "Nutrition scores" },
-            { icon: "💰", label: "Price per serving" },
-            { icon: "🌾", label: "FODMAP & Allergies" }
-          ].map((f) => (
-            <div key={f.label} className="text-xs font-semibold text-stone-500">
-              <div className="mb-1 text-2xl">{f.icon}</div>
-              {f.label}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Empty state ── */
-function EmptyState({ isSearching, itemCount }: { isSearching: boolean; itemCount: number }) {
-  return (
-    <div className="grid min-h-[32rem] place-items-center rounded-[2rem] border border-dashed border-stone-200 bg-white/60 p-8 text-center backdrop-blur-sm">
-      <div>
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-stone-100 to-stone-200 text-stone-400">
-          {isSearching ? (
-            <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
-          ) : (
-            <Sparkles className="h-10 w-10 text-emerald-500" />
-          )}
-        </div>
-        <h2 className="mt-5 text-2xl font-black text-stone-800">
-          {isSearching ? "Finding healthy picks…" : "Ready to search"}
-        </h2>
-        <p className="mx-auto mt-2 max-w-sm font-semibold text-stone-400">
-          {isSearching
-            ? "Fetching products and computing nutrition, price, and diet scores."
-            : itemCount === 0
-            ? "Add grocery items to your list or try Quick Mode above."
-            : `Hit "Search products" to compare ${itemCount} item${itemCount !== 1 ? "s" : ""} with ranked options.`}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/* ── Product carousel for one grocery item ── */
-function ProductCarousel({
-  item,
-  isPaid,
-  markBought,
-  boughtIds,
-  selectedAllergies,
-  onSelectProduct
-}: {
-  item: ResultItem;
-  isPaid: boolean;
-  markBought: (query: string, product: RankedProduct) => void;
-  boughtIds: Set<string>;
-  selectedAllergies: Allergen[];
-  onSelectProduct: (product: RankedProduct) => void;
-}) {
-  return (
-    <section className="rounded-[2rem] border border-stone-200/80 bg-white p-5 shadow-sm shadow-stone-900/5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-[#166534]">
-            <Search className="h-3 w-3" /> Grocery item
-          </p>
-          <h2 className="text-2xl font-black capitalize text-stone-950">{item.query}</h2>
-          <p className="mt-0.5 text-xs font-semibold text-stone-400">{item.options.length} option{item.options.length !== 1 ? "s" : ""} ranked</p>
-        </div>
-        {item.error && (
-          <span className="rounded-full bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-200">
-            {item.error}
-          </span>
-        )}
-      </div>
-
-      <div className="no-scrollbar mt-4 flex gap-4 overflow-x-auto pb-3">
-        {item.options.length === 0 && !item.error && (
-          <p className="rounded-2xl bg-stone-50 px-6 py-8 text-sm font-semibold text-stone-400">
-            No results found for this item.
-          </p>
-        )}
-        {item.options.map((product, i) => (
-          <div key={product.providerProductId} className="pop-in" style={{ animationDelay: `${i * 40}ms` }}>
-            <ProductCard
-              product={product}
-              isPaid={isPaid}
-              query={item.query}
-              onBought={markBought}
-              alreadyBought={boughtIds.has(product.providerProductId)}
-              selectedAllergies={selectedAllergies}
-              onSelect={() => onSelectProduct(product)}
-            />
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/* ── Individual product card ── */
-function ProductCard({
-  product,
-  isPaid,
-  query,
-  onBought,
-  alreadyBought,
-  selectedAllergies,
-  onSelect
-}: {
-  product: RankedProduct;
-  isPaid: boolean;
-  query: string;
-  onBought: (query: string, product: RankedProduct) => void;
-  alreadyBought: boolean;
-  selectedAllergies: Allergen[];
-  onSelect: () => void;
-}) {
-  const tags = extractTags(product.health, product.title).slice(0, 3);
-  const matchedAllergens = checkAllergens(product.health, product.title, selectedAllergies);
-  const priceServing = computePricePerServing(
-    product.estimatedPrice,
-    product.health.servingSize,
-    product.health.servingsPerContainer,
-    product.title
-  );
-
-  return (
-    <article
-      onClick={onSelect}
-      className="w-[270px] cursor-pointer flex-shrink-0 bg-[#F5F5F7] border border-black/[0.05] rounded-3xl p-4 flex flex-col justify-between transition-all duration-200 hover:-translate-y-1 hover:shadow-md group"
-    >
-      <div>
-        {/* Aspect ratio 1:1 image container on white background */}
-        <div className="relative bg-white rounded-2xl p-2 mb-3 shadow-sm aspect-square flex items-center justify-center overflow-hidden">
-          {product.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={product.imageUrl}
-              alt={product.title}
-              className="max-h-full max-w-full object-contain transition-transform duration-300 group-hover:scale-105"
-              loading="lazy"
-            />
-          ) : (
-            <ShoppingBasket className="h-10 w-10 text-slate-300" />
-          )}
-
-          {/* Health Score Pill */}
-          <div className="absolute right-2 top-2 bg-[#34C759] text-white text-xs font-bold font-num px-2.5 py-1 rounded-full shadow-sm flex items-center gap-1">
-            <span>{product.overallScore}</span>
-            <span className="text-[10px] opacity-80">/100</span>
-          </div>
-
-          {alreadyBought && (
-            <div className="absolute left-2 top-2 bg-[#34C759] text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
-              <Check className="h-3 w-3" /> Bought
-            </div>
-          )}
-
-          {matchedAllergens.length > 0 && (
-            <div className="absolute left-2 bottom-2 bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
-              <ShieldAlert className="h-3 w-3" /> Allergen
-            </div>
-          )}
-        </div>
-
-        {/* Title and seller */}
-        <p className="line-clamp-2 min-h-10 text-xs font-bold text-[#1D1D1F] leading-snug group-hover:text-[#166534] transition-colors">
-          {product.title}
-        </p>
-        <p className="mt-0.5 text-[11px] font-medium text-[#86868B] truncate">
-          {product.provider === "serpapi_google_shopping"
-            ? `Google Shopping • ${product.seller ?? "Retailer"}`
-            : product.provider === "open_prices"
-            ? "Open Prices (Crowdsourced)"
-            : product.seller ?? product.brand ?? "Grocery item"}
-        </p>
-
-        {/* Price & Price per serving */}
-        <div className="mt-2.5 flex items-baseline justify-between gap-1">
-          <div>
-            <span className="font-num text-sm font-extrabold text-[#1D1D1F]">
-              {product.estimatedPrice === null ? "Est. ?" : `$${product.estimatedPrice.toFixed(2)}`}
-            </span>
-            {priceServing && (
-              <span className="ml-1.5 text-[10px] font-semibold text-[#166534]">
-                ({priceServing.formatted})
-              </span>
-            )}
-          </div>
-          <div className="flex gap-1">
-            <NutriBadge score={product.health.nutriScore} />
-            {product.health.novaGroup && <NovaBadge nova={product.health.novaGroup} />}
-          </div>
-        </div>
-
-        {/* Tag Badges */}
-        {tags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {tags.map((t) => (
-              <span
-                key={t.id}
-                className="bg-white text-slate-700 text-[10px] font-semibold px-2 py-0.5 rounded-md border border-black/[0.06] flex items-center gap-1"
-              >
-                <span>{t.icon}</span>
-                <span>{t.label}</span>
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Diet Fit Badges */}
-        {product.dietFit.matchedModes.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {product.dietFit.matchedModes.map((mode) => (
-              <span
-                key={mode}
-                className="bg-emerald-50 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1"
-              >
-                <Star className="h-2.5 w-2.5 text-[#166534] fill-[#166534]" /> {DIET_LABELS[mode]}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Explanation */}
-        <p className="mt-2 text-[11px] font-medium leading-relaxed text-[#86868B] line-clamp-2">
-          {product.explanation}
-        </p>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="mt-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
-        <button
-          id={`bought-btn-${product.providerProductId}`}
-          className={cn(
-            "flex-1 rounded-2xl py-2.5 text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
-            alreadyBought
-              ? "bg-[#34C759]/15 text-[#248A3D] border border-[#34C759]/30"
-              : "bg-[#34C759] text-white hover:bg-[#248A3D] active:scale-95 shadow-sm"
-          )}
-          onClick={() => onBought(query, product)}
-        >
-          {alreadyBought ? (
-            <><Check className="h-3.5 w-3.5" /> Bought ✓</>
-          ) : (
-            <><ShieldCheck className="h-3.5 w-3.5" /> Bought this</>
-          )}
-        </button>
-
-        {product.productUrl && (
-          <a
-            href={product.productUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center rounded-2xl border border-black/[0.08] bg-white px-2.5 py-2.5 text-[#86868B] hover:text-[#1D1D1F] transition"
-            aria-label="View product website"
+        </Sheet>
+      )}
+      {overlay === "save" && (
+        <Sheet title="Save your grocery list" onClose={() => setOverlay(null)}>
+          <p className="sheet-intro">Save a snapshot to return to next time.</p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void perform(async () => {
+                if (!session) throw new Error("Sign in to save your list.");
+                await api("/api/lists", "POST", { name: name.trim(), items });
+                setOverlay(null);
+                setMessage("List saved.");
+              });
+            }}
           >
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
-        )}
-      </div>
-    </article>
-  );
-}
-
-/* ── Nutri-score badge ── */
-function NutriBadge({ score }: { score: string }) {
-  const colors: Record<string, string> = {
-    a: "bg-emerald-500 text-white",
-    b: "bg-lime-500 text-white",
-    c: "bg-yellow-400 text-yellow-950",
-    d: "bg-orange-500 text-white",
-    e: "bg-red-600 text-white",
-    unknown: "bg-stone-200 text-stone-500"
-  };
-  return (
-    <span className={cn("grid h-6 w-6 place-items-center rounded-lg text-[10px] font-black", colors[score] ?? colors.unknown)}>
-      {score === "unknown" ? "?" : score.toUpperCase()}
-    </span>
-  );
-}
-
-/* ── NOVA group badge ── */
-function NovaBadge({ nova }: { nova: number }) {
-  const color = nova <= 2 ? "bg-emerald-100 text-emerald-800" : nova === 3 ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800";
-  return (
-    <span className={cn("grid h-6 w-9 place-items-center rounded-lg text-[10px] font-black", color)}>
-      N{nova}
-    </span>
+            <label className="field-label" htmlFor="list-name">
+              List name
+            </label>
+            <input
+              className="text-input"
+              id="list-name"
+              value={name}
+              maxLength={120}
+              required
+              onChange={(e) => setName(e.target.value)}
+            />
+            <button
+              className="primary-button full-width"
+              disabled={busy || !name.trim()}
+            >
+              Save list
+            </button>
+          </form>
+          {!session && (
+            <button
+              className="text-button"
+              onClick={() => setOverlay("account")}
+            >
+              Sign in to save lists
+              <ArrowRight size={16} />
+            </button>
+          )}
+          {message && (
+            <p className="notice" role="status">
+              {message}
+            </p>
+          )}
+        </Sheet>
+      )}
+      {overlay === "lists" && (
+        <Sheet title="Saved lists" onClose={() => setOverlay(null)}>
+          {busy ? (
+            <p role="status">Loading your lists…</p>
+          ) : lists.length ? (
+            lists.map((list) => (
+              <div className="saved-list-row" key={list.id}>
+                <button onClick={() => openList(list)}>
+                  <List size={18} />
+                  <span>
+                    <strong>{list.name}</strong>
+                    <small>
+                      {list.grocery_list_items?.filter((i) => i.is_active)
+                        .length ?? 0}{" "}
+                      items
+                    </small>
+                  </span>
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="sheet-intro">
+              Your saved lists will appear here. Save your first list to get
+              started.
+            </p>
+          )}
+          {!session && (
+            <button
+              className="primary-button"
+              onClick={() => setOverlay("account")}
+            >
+              Sign in
+            </button>
+          )}
+          {message && (
+            <p className="notice" role="status">
+              {message}
+            </p>
+          )}
+        </Sheet>
+      )}
+      {overlay === "options" && (
+        <Sheet title={optionQuery} wide onClose={() => setOverlay(null)}>
+          <div className="options-toolbar">
+            <span>{options.length} options</span>
+            <label>
+              Sort{" "}
+              <select value={sort} onChange={(e) => setSort(e.target.value)}>
+                <option value="match">Best match</option>
+                <option value="price">Lowest price</option>
+                <option value="nutrition">Nutrition score</option>
+              </select>
+            </label>
+          </div>
+          {stale && (
+            <p className="notice">
+              Search again to apply your updated preferences.
+            </p>
+          )}
+          <div className="options-grid">
+            {options.map((product) => (
+              <button
+                className="option-card"
+                key={productKey(product)}
+                onClick={() => select(optionQuery, product)}
+              >
+                <div className="option-photo">
+                  <ProductImage product={product} />
+                </div>
+                <div>
+                  <ScoreBadge product={product} />
+                  <small> Match score</small>
+                </div>
+                <h3>{product.title}</h3>
+                <p>{product.packageSize || "Size unavailable"}</p>
+                <strong>{priceLabel(product)}</strong>
+                <p className="fine-print">
+                  {product.provider.startsWith("mock")
+                    ? "Demo example"
+                    : product.seller || "Seller unavailable"}{" "}
+                  · estimated
+                </p>
+                <span className="option-link">
+                  See why
+                  <ChevronRight size={16} />
+                </span>
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
+      {overlay === "detail" && selection && (
+        <Sheet title="Product details" onClose={() => setOverlay(null)}>
+          {detail}
+          {message && (
+            <p className="notice" role="status">
+              {message}
+            </p>
+          )}
+        </Sheet>
+      )}
+    </div>
   );
 }

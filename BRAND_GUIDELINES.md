@@ -1,242 +1,127 @@
-# OnlyGoodBites — Apple-Inspired Brand Identity & Design System
+# Meezany Look And Feel
 
-An ultra-minimalist, Apple-inspired design language for **OnlyGoodBites**: a smart mobile-first grocery decision app that helps users turn simple grocery lists into ranked product options with health scores, diet-fit badges, and estimated prices.
+Updated September 27, 2026.
 
----
+Design and implementation guide based on the supplied brand board and mobile/desktop references. Full product vision and technical status live in [README.md](README.md). A control pictured in a reference is not proof that its feature exists.
 
-## 1. Primary Brand Logo: The Broccoli Bite 🥦
+## Brand
 
-The official logo for **OnlyGoodBites** is an ultra-minimalist vector silhouette of a broccoli head with a clean bite taken out of the right side—inspired directly by the timeless Apple logo language.
+**Meezany. Better groceries, without the homework.**
 
-### Logo Guidelines & Rationale
+Simple, warm, clever, confident, useful, and food-first. The app should feel like a practical grocery companion: little input, fast comparisons, clear explanations. Avoid moral judgments about food and promises of medically safe choices.
 
-* **Subject**: A stylized, geometrically balanced broccoli head.
-* **The Bite Mark**: A crisp circular cut on the right, instantly conveying "bites", taste, and smart grocery decisions.
-* **Style**: Monochrome silhouette (Jet Black `#000000` or Pure White `#FFFFFF`), flat vector, no gradients or heavy shadows.
-* **Usage**: App store icon, mobile navbar header logo, PWA splash screen, favicon.
+Use familiar language: My grocery list, See options, See why, Bought this, Preferences. "Meez it" is optional campaign language, not a replacement for recognizable controls. Product names, prices, and nutrition take priority over slogans.
 
----
+## Logo And References
 
-### React / SVG Logo Component Snippet
+The mark is a continuous ribbon or peel forming a lowercase M. Black is the primary UI mark; white reverses onto black. The orange peel is a secondary expressive asset, not a reason to make the app orange.
 
-Copy-pasteable React SVG component for the **Broccoli Bite** logo:
+- [Brand board](docs/design-reference/brand-board.png)
+- [Black app icon](public/brand/meezany-icon.png)
+- [Orange peel asset](public/brand/meezany-peel.png)
+- [Mobile designs](docs/design-reference/mobile-screens.png)
+- [Desktop design](docs/design-reference/desktop-workspace.png)
 
-```tsx
-export function BroccoliBiteLogo({ className = "w-8 h-8 text-black dark:text-white" }: { className?: string }) {
-  return (
-    <svg 
-      className={className} 
-      viewBox="0 0 100 100" 
-      fill="currentColor" 
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      {/* Stem */}
-      <path d="M40 56C38 65 37 75 42 85C45 91 55 91 58 85C63 75 62 65 60 56Z" fill="currentColor" />
-      <path d="M42 56L34 68M58 56L66 68" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-      {/* Broccoli Florets with Bite Mark on Right */}
-      <path 
-        fillRule="evenodd" 
-        clipRule="evenodd" 
-        d="M50 18C41.7 18 34.6 22.5 31 29.2C27.5 28.1 23.6 29 20.8 31.8C16.8 35.8 16.8 42.2 20.8 46.2C19.6 49.5 20.2 53.3 22.5 56C25.8 59.8 31.2 60.8 35.6 58.7C40 60 45 60.5 50 60.5C54.5 60.5 59.2 60.1 63.5 58.9C67.8 60.8 73 59.9 76.3 56.4C77.5 55 78.3 53.3 78.6 51.5C76 51 73.8 49.5 72.5 47C70.5 43.1 71.5 38.3 75 35.5C73.8 30.5 69.8 26.8 64.7 26.2C61.3 21.2 55.9 18 50 18Z" 
-        fill="currentColor" 
-      />
-    </svg>
-  );
-}
-```
+Original supplied PNGs are preserved unchanged. `components/MeezanyLogo.tsx` and `public/brand/meezany-mark.svg` provide a provisional code-native ribbon silhouette. Replace with the designer's final vector export when available; this is not an exact trace. The broccoli mark is retired from active UI.
 
----
+Keep breathing room around the mark. UI width: 40-48px, never below 24px. Wordmark: semibold system sans. Do not stretch or add shadows, leaves, shopping carts, or medical symbols to the brand. Familiar functional icons remain appropriate for actual controls.
 
-## 2. 📱 The 3 Core App Screens (UI Architecture & Design Specs)
+## Visual Tokens
 
-Here is the complete designer specification for the **3 Core Screens** of the OnlyGoodBites web application, built around Apple's clean white aesthetic (`#FFFFFF`), iOS grey card surfaces (`#F5F5F7`), and Apple system colors.
+| Role | Value | Use |
+| --- | --- | --- |
+| Meezany black | `#111111` | Text, primary actions, selected switches |
+| White | `#FFFFFF` | Workspace, product images |
+| Warm canvas | `#F7F6F2` | Small secondary areas |
+| Soft gray | `#EEEEEC` | Dividers, muted controls |
+| Secondary text | `#70706C` | Metadata |
+| Peel red | `#D9362B` | Sparse accent, destructive actions |
+| Nutrition green | `#18683B` on `#E8F3EB` | Favorable measured signals |
+| Nutrition amber | `#865700` on `#FFF3D6` | Mixed signals |
+| Nutrition red | `#A33229` on `#FBECE9` | Less favorable signals |
 
-```
-+-----------------------------------------------------------------------------------+
-| SCREEN 1: Main Grocery Dashboard    | SCREEN 2: Diet Mode Drawer    | SCREEN 3: AI Recipes & History    |
-| - Header with Broccoli Bite logo    | - Active diet mode toggles    | - Recipe ideas from bought items  |
-| - Grocery item list editor          | - Ranking weight customization | - Purchase history log            |
-| - Horizontal product carousels      | - Plain-language disclaimers  | - Quick repeat add buttons        |
-| - Interactive "Bought this" state   |                               |                                   |
-+-----------------------------------------------------------------------------------+
-```
+White dominates. Color comes mostly from product photography. No decorative gradients, green page washes, floating glass panels, or nested cards. Lists and sections sit directly on the page with hairline dividers. Product tiles have thin borders and an 8px radius. Rounded sheets are appropriate; shadows are reserved for overlays.
 
----
+## Type And Spacing
 
-### Screen 1: Main Grocery List & Product Carousels (Core Workspace)
+Native system sans: `-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`. This follows the SF Pro direction on Apple devices without bundling a licensed font or requiring remote font downloads.
 
-The primary screen where users enter grocery items and explore horizontal carousels of ranked options.
+- Page title: 28-32px, 600-700 weight.
+- Section/detail title: 20-22px, 600 weight.
+- Product/body: 15-17px, 400-600 weight.
+- Metadata: 12-14px; avoid tiny essential information.
+- Prices/scores: tabular numerals in the same font family.
+- Letter spacing: zero; never use viewport-width font sizing.
+- Spacing: 4, 8, 12, 16, 24, 32px.
+- Interactive targets: aim for 44px, with visible keyboard focus.
 
-#### Layout Structure & Wireframe
+## Responsive Layout
 
-```txt
-+------------------------------------------------------------------------+
-| [🥦 OnlyGoodBites]                   [Saved Lists ▾]  [⚙️ Diets (2)]  |  <- Glass Header
-+------------------------------------------------------------------------+
-| 📥 Grocery List Editor                                                  |
-| [ + Add item e.g. "Greek yogurt, chips" ] [ Rank Products ]             |
-+------------------------------------------------------------------------+
-| 🥣 Greek Yogurt  (3 options ranked)                                     |
-|                                                                        |
-| +---------------------+  +---------------------+  +------------------+ |
-| | [ Product Photo ]   |  | [ Product Photo ]   |  | [ Product Photo ]| |
-| | Fage Total 2%       |  | Chobani Less Sugar  |  | Oikos Triple 0   | |
-| | $3.99 est.          |  | $4.29 est.          |  | $3.89 est.       | |
-| | [🟢 88/100] [Nutri A]|  | [🟢 85/100] [Nutri A]|  | [🟢 86/100]       | |
-| | [High Protein]      |  | [Low Sugar]         |  | [Zero Sugar]     | |
-| | "Top protein ratio" |  | "Lower sugar"       |  | "No added sugar" | |
-| | [ ✓ Bought this ]   |  | [   Bought this ]   |  | [   Bought this ]| |  <- Active vs Idle
-| +---------------------+  +---------------------+  +------------------+ |
-| <-------------------- Horizontal Scroll Carousel --------------------> |
-+------------------------------------------------------------------------+
-```
+Desktop: 208px navigation rail, flexible grocery list, 360px product-detail panel. The rail contains the brand, list, quick lookup, preferences, and saved lists. Keep selected rows subtly highlighted. The detail panel stays visible while browsing products.
 
-#### Component & Interaction Specifications for Screen 1
+List title, item count, input, search, and save actions sit above compact rows. Each row shows the original query, best option summary, product thumbnails/prices, and access to all options. Editing controls are secondary.
 
-1. **Header Bar (`Navbar`)**:
-   - Background: `bg-white/80 backdrop-blur-xl border-b border-black/[0.05] sticky top-0 z-50`
-   - Elements: **Broccoli Bite** logo (`w-7 h-7 text-black`), App title (`Plus Jakarta Sans Bold`), Saved list pill button (`bg-[#F5F5F7] text-xs font-semibold rounded-full px-3 py-1.5`).
+Mobile: compact brand header and bottom navigation, full-width list, horizontal thumbnail strips within rows, and product-detail/preferences/saved-list sheets. At intermediate widths use the same sheets instead of squeezing the desktop panel. The page itself must never scroll sideways. Mobile inputs use at least 16px text.
 
-2. **Grocery Item Card Header**:
-   - Title: `text-xl font-bold text-[#1D1D1F]` with item count badge.
+## Core Surfaces
 
-3. **Product Carousel Cards (`ProductCard.tsx`)**:
-   - Container: `w-[260px] flex-shrink-0 bg-[#F5F5F7] border border-black/[0.04] rounded-3xl p-4 flex flex-col justify-between`
-   - Image Frame: Aspect ratio 1:1 image container on white background (`bg-white rounded-2xl p-2 mb-3 shadow-sm`).
-   - Price: `$3.99 est.` rendered in `Space Grotesk` or `SF Mono` bold (`text-sm font-semibold text-[#1D1D1F]`).
-   - Health Score Pill: `bg-[#34C759] text-white text-xs font-bold font-mono px-2.5 py-1 rounded-full`.
-   - Diet Fit Badges: `bg-white text-slate-700 text-[11px] font-medium px-2 py-0.5 rounded-md border border-black/[0.06]`.
+### Grocery List
 
-4. **"Bought This" Interactive Button (`BoughtButton.tsx`)**:
-   - **Idle State**: Solid Black button `bg-black text-white hover:bg-[#1C1C1E] active:scale-95 transition-all rounded-2xl py-2.5 text-xs font-semibold`.
-   - **Bought Active State**: `bg-[#34C759]/10 text-[#248A3D] border border-[#34C759]/30 rounded-2xl py-2.5 text-xs font-semibold flex items-center justify-center gap-1.5`. Contains a green checkmark icon `✓`. Stores selection to history automatically.
+The first screen is the usable list. Accept typed items, comma/newline lists, and common bullet/number prefixes. Keep move-up/down buttons alongside drag reorder. Switching lists clears stale selections. Results follow list order. Quick lookup accepts one query without creating a list.
 
----
+Show loading per searched row. Distinguish not searched, no results, and provider failure. Preference changes require another search; don't imply old results reflect new preferences.
 
-### Screen 2: Diet Mode Packs & Scoring Filter Drawer
+### Product Options
 
-An iOS-style bottom sheet drawer where users select active diet filters that dynamically alter product rankings.
+Stable image dimensions with `object-fit: contain`; never crop labels. Use a neutral missing-image state. Sort by best match, lowest estimated price, or nutrition score. Unknown prices go last.
 
-#### Layout Structure & Wireframe
+Show title, known package size, estimated price, labeled score, factual tags, and a detail action. `overallScore` is a **match score** because it includes relevance, price, diet fit, and health. Do not relabel it as a pure health score. Calibrated category-relative nutrition scoring remains future work.
 
-```txt
-+------------------------------------------------------------------------+
-|                                  =====  (Drag Handle)                   |
-| ⚙️ Choose Diet Mode Packs                                      [ Done ] |
-| Customizes product scoring & ranking algorithms.                        |
-+------------------------------------------------------------------------+
-| ACTIVE DIET MODES                                                      |
-|                                                                        |
-| [ ✓ High Protein    ]  [ ✓ Low Sugar         ]  [   Diabetes-Conscious ] |
-| Rewards protein content Penalizes sugars        Prioritizes high fiber |
-| ( Active - iOS Green ) ( Active - iOS Green )  ( Tap to enable )     |
-|                                                                        |
-| [   Low Sodium      ]  [   Gluten-Free       ]  [   Heart-Conscious    ] |
-| Penalizes salt         Prefer GF tags           Penalizes sat fats     |
-+------------------------------------------------------------------------+
-| 💡 HOW SCORING WORKS                                                   |
-| Overall Score (0-100) = Price + Health + Diet Fit + Purchase History   |
-| Disclaimers: Diet modes are general food preference filters, not       |
-| medical advice.                                                        |
-+------------------------------------------------------------------------+
-```
+### Product Detail
 
-#### Component Specifications for Screen 2
+Large image, match score, title, package size, estimated price, seller link, tags, bought action. Tabs: Nutrition, Ingredients, About. Current nutrition data is per 100g, so label it that way. Show price per serving only when both price and a real serving count exist. Unknown is never zero.
 
-1. **Drawer Container (`DietModeDrawer.tsx`)**:
-   - Backdrop: `bg-black/40 backdrop-blur-sm fixed inset-0 z-50`
-   - Sheet: `bg-white rounded-t-[32px] p-6 max-w-lg mx-auto shadow-2xl border-t border-black/5`
+Use text alongside colors. Show source/confidence and missing data. Do not imply an allergy match establishes safety; users must verify packaging. Keep FODMAP explicitly beta. A strong match score does not establish complete nutrition evidence.
 
-2. **Diet Mode Toggle Chips**:
-   - **Selected Chip**: `bg-[#34C759]/10 border-2 border-[#34C759] text-[#1D1D1F] p-4 rounded-2xl shadow-sm flex flex-col gap-1 transition-all`
-   - **Unselected Chip**: `bg-[#F5F5F7] border border-black/[0.04] text-[#86868B] p-4 rounded-2xl hover:bg-[#EBEBEB] transition-all`
-   - Icons: Includes status indicator (iOS green check for active).
+### Preferences
 
-3. **Plain-Language Disclaimer Box**:
-   - `bg-[#F5F5F7] rounded-2xl p-4 text-xs text-[#86868B] border border-black/[0.04]`
-   - Clearly states diet modes are food preference rankings, not medical treatments.
+Grouped switch rows: Diet & goals, Allergies & avoid, Location, with an implemented bulk shopping preference. Selected switches are black. Preserve supported modes and allergy controls. ZIP remains optional and USA-only; prices remain estimates. New preference types stay in the vision until supported by data and ranking logic.
 
----
+### Account And Lists
 
-### Screen 3: AI Recipe Ideas & Bought History Hub
+Google OAuth primary, email magic link secondary. Saved lists need loading, empty, success, and error states. Bought confirmation follows API success. Keep current account/entitlement behavior aligned with the backend, not mockup badges.
 
-A dedicated view for paid users to turn bought grocery items into instant, simple recipes and manage purchase history.
+## Accessibility And Motion
 
-#### Layout Structure & Wireframe
+Short 120-180ms transitions; respect reduced motion. Lucide functional icons with accessible names and hover titles. Dialogs trap focus, close on Escape, and restore focus. Status messages use live regions. Tabs/navigation expose selected state. Never rely on color alone.
 
-```txt
-+------------------------------------------------------------------------+
-| 💡 AI Recipe Ideas                                        [ ✦ Paid ]   |
-| Based on items marked [Bought This] in your current list               |
-+------------------------------------------------------------------------+
-| +--------------------------------------------------------------------+ |
-| | 🥣 High-Protein Yogurt Oat Bowl                                    | |
-| | Uses: Plain Greek Yogurt, Oats  |  Prep: 5 mins  | Est: $1.40/serv | |
-| | Fit: High Protein, Low Sugar                                       | |
-| |                                                                    | |
-| | Steps:                                                             | |
-| | 1. Add 3/4 cup Greek yogurt to a bowl.                             | |
-| | 2. Stir in 1/2 cup old fashioned oats.                             | |
-| | 3. Top with cinnamon or fresh berries if available.                | |
-| |                                                                    | |
-| | [ 💾 Save Recipe ]                    [ 🍳 View Step-by-Step ]      | |
-| +--------------------------------------------------------------------+ |
-+------------------------------------------------------------------------+
-| 📜 Bought History (3 Items Marked Bought Last Trip)                    |
-|                                                                        |
-| [✓] Fage Total 2% Greek Yogurt  -  $3.99  (Bought 2 days ago)        |
-| [✓] Kraft Macaroni & Cheese     -  $1.79  (Bought 2 days ago)        |
-|                                                                        |
-| [ 🔄 Add All Previous Items to New List ]                              |
-+------------------------------------------------------------------------+
-```
+## Full Vision Versus Release
 
-#### Component Specifications for Screen 3
+References show scan, recipes, ZIP/store lookup, sharing, and a meal prompt. Those belong to the README vision. Don't add dead navigation, invented inventory, or fabricated nutrition to match a screenshot. This refresh changes branding and existing discovery surfaces; later capabilities require their own implementation.
 
-1. **AI Recipe Card (`RecipeCard.tsx`)**:
-   - Container: `bg-white border border-black/[0.08] rounded-3xl p-6 shadow-sm`
-   - Badge: `bg-emerald-50 text-[#248A3D] text-xs font-semibold px-3 py-1 rounded-full`
-   - Step List: `space-y-2 text-sm text-[#1D1D1F] list-decimal pl-4`
+## Acceptance
 
-2. **Bought History List (`BoughtHistoryDrawer.tsx`)**:
-   - History Items: `flex items-center justify-between py-3 border-b border-black/[0.05]`
-   - Repeat Action: `bg-[#F5F5F7] hover:bg-black hover:text-white transition-all text-xs font-semibold px-3 py-1.5 rounded-xl`.
+- Meezany across header, browser metadata, manifest, and current docs.
+- No active broccoli branding or green gradients.
+- Search, quick lookup, preferences, saved lists, and bought actions remain usable.
+- Desktop list/detail browsing and mobile sheets work with keyboard focus.
+- Long titles, missing photos/prices, unknown health, empty lists, and failed searches fit at 390px and 1440px.
+- Scores, estimated prices, units, and uncertainty are accurately labeled.
+- Full vision preserved without presenting planned features as released.
 
----
+## Implemented Refresh
 
-## 3. Google Fonts Typography System
+The current app uses this system in `components/Dashboard.tsx`, `components/ProductDetail.tsx`, and `app/globals.css`.
 
-| Usage | Font Family | Weight | Purpose |
-| :--- | :--- | :--- | :--- |
-| **Headings & Hero** | `Plus Jakarta Sans` / `SF Pro Display` | 600 (SemiBold), 700 (Bold) | Clean geometric sans headings with crisp letterform spacing |
-| **UI Controls & Body** | `Inter` / `SF Pro Text` | 400 (Regular), 500 (Medium) | Maximum clarity for product titles, ingredients, descriptions |
-| **Scores & Prices** | `Space Grotesk` / `SF Mono` | 600 (SemiBold), 700 (Bold) | Numerical precision for health scores (`88/100`) & price tags |
+- Desktop: navigation rail, editable grocery workspace, and a sticky, independently scrollable product-detail panel.
+- Mobile: compact header, bottom navigation, horizontally browsable option cards, and native dialog sheets.
+- Existing discovery flows: list search, quick lookup, diet/allergen preferences, optional ZIP, product details, Google/email sign-in, saved-list snapshots, and purchase recording.
+- List entry accepts commas, newlines, bullets, and numbered lists, with case-insensitive duplicates removed. Reorder with drag handles or move buttons in Edit list. Checkoffs are local UI state; Bought this records a product only after the API succeeds.
+- Product options sort by match, estimated price, or the existing nutrition score. Missing prices and missing nutrition rank last in their respective sorts.
+- Recipes, scan, social, export, and meal-calendar navigation are deferred until those flows exist.
 
-```html
-<!-- Google Fonts Import -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
-```
+The original reference assets are retained. The SVG ribbon is a provisional interpretation; final production vector artwork is still needed for an exact logo match.
 
----
+Verification for this refresh: TypeScript, 92 unit tests, production build, and desktop/mobile browser checks. Browser integration checks use controlled fixtures for product, list, and purchase responses; live OAuth, provider data, and account persistence require an authenticated staging check.
 
-## 4. UI Color Palette & Design Tokens
-
-### Light Theme Core Tokens
-
-| Token Name | Hex Code | Visual Sample | Usage |
-| :--- | :--- | :--- | :--- |
-| `bg-primary` | `#FFFFFF` | ⬜ Pure White | Page background |
-| `bg-secondary` | `#F5F5F7` | 🌫️ iOS Soft Grey | Carousel cards, input fields, container backgrounds |
-| `text-primary` | `#1D1D1F` | ⬛ Apple Jet Black | Main headings, product titles |
-| `text-secondary` | `#86868B` | 🩶 Apple Muted Grey | Secondary descriptions, weight units, estimated text |
-| `ios-green` | `#34C759` | 🟩 iOS System Green | High health scores (80+), Nutri-Score A, active diet chips |
-| `ios-orange` | `#FF9500` | 🟧 iOS System Orange | Medium health scores, price highlights |
-| `ios-red` | `#FF3B30` | 🟥 iOS System Red | Low health scores, NOVA 4 warnings |
-| `btn-primary` | `#000000` | ⬛ Solid Black | "Bought this" primary button, main CTA |
-
----
-
-> [!TIP]
-> **Developer Ready**: All colors, typography imports, and CSS custom variables in this document follow Tailwind CSS standards and map 1:1 to the Next.js components specified in `README.md`.
+Backend behavior and evidence requirements are documented in [Backend implementation](docs/BACKEND.md). Show progressive item results, explicit unknown nutrition, observed price source/date, and comparable unit prices when supported.

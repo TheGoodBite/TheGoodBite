@@ -1,181 +1,267 @@
 import { getOrSet } from "@/lib/cache";
 import { classifyHealth, UNKNOWN_HEALTH } from "@/lib/health";
 import type { HealthInfo, ProductCandidate } from "@/lib/types";
-import { normalizeQuery, sha256 } from "@/lib/utils";
+import { sha256, normalizeQuery } from "@/lib/utils";
+import {
+  parsePackage,
+  productTokens,
+  samePackage,
+  validBarcode,
+  words,
+} from "@/lib/products";
+import {
+  ProviderError,
+  mapConcurrent,
+  providerJson,
+  reserveBudget,
+} from "@/lib/providerRuntime";
 
-type OffProduct = {
+export type OffProduct = {
+  code?: string;
   product_name?: string;
   brands?: string;
+  quantity?: string;
+  countries_tags?: string[];
   nutriscore_grade?: string;
   nova_group?: number;
-  nutriments?: Record<string, number>;
+  nutriments?: Record<string, number | string>;
   serving_size?: string;
-  serving_quantity?: number;
   ingredients_text?: string;
   labels_tags?: string[];
   categories_tags?: string[];
   allergens_tags?: string[];
+  traces_tags?: string[];
 };
+const FIELDS =
+  "code,product_name,brands,quantity,countries_tags,nutriscore_grade,nova_group,nutriments,serving_size,ingredients_text,labels_tags,categories_tags,allergens_tags,traces_tags";
+const unknown = (availability: "no_match" | "unavailable"): HealthInfo => ({
+  ...UNKNOWN_HEALTH,
+  availability,
+});
 
-export async function getHealthForProduct(candidate: ProductCandidate, query: string): Promise<HealthInfo> {
-  if (candidate.upc) {
-    const barcodeHealth = await getByBarcode(candidate.upc);
-    if (barcodeHealth) return barcodeHealth;
-  }
-
-  return (await searchByText(candidate, query)) ?? UNKNOWN_HEALTH;
+export function matchProduct(
+  product: OffProduct,
+  candidate: ProductCandidate,
+): boolean {
+  if (
+    !product.countries_tags?.includes("en:united-states") ||
+    !product.product_name ||
+    !product.brands
+  )
+    return false;
+  const title = productTokens(candidate.title);
+  const brands = product.brands.split(",").map((b) => words(b));
+  const brand = brands.find(
+    (tokens) => tokens.length && tokens.every((t) => title.includes(t)),
+  );
+  if (!brand) return false;
+  if (
+    candidate.brand &&
+    !brands.some(
+      (tokens) => tokens.join(" ") === words(candidate.brand!).join(" "),
+    )
+  )
+    return false;
+  const wanted = title.filter((t) => !brand.includes(t));
+  const actual = productTokens(product.product_name).filter(
+    (t) => !brand.includes(t),
+  );
+  // All variant words must agree, including fat percentages, flavors, sweeteners, and preparation.
+  return (
+    wanted.length > 0 &&
+    wanted.length === actual.length &&
+    wanted.every((t) => actual.includes(t))
+  );
 }
-
-async function getByBarcode(upc: string) {
-  const cacheKey = `off:barcode:${upc}`;
-  return getOrSet<HealthInfo | null>(cacheKey, 60 * 60 * 24 * 60, async () => {
-    const url = `https://world.openfoodfacts.org/api/v3/product/${encodeURIComponent(upc)}.json`;
-    const response = await fetch(url, {
-      headers: { "User-Agent": userAgent() },
-      next: { revalidate: 60 * 60 * 24 * 30 }
-    });
-
-    if (!response.ok) return null;
-    const data = (await response.json()) as { product?: OffProduct; status?: string | number };
-    return data.product ? fromOffProduct(data.product, "high") : null;
-  });
-}
-
-async function searchByText(candidate: ProductCandidate, query: string) {
-  const cleanTitle = candidate.title.replace(/[^\w\s]/gi, " ").trim();
-  const searchTerms = [candidate.brand, cleanTitle, query].filter(Boolean).join(" ").slice(0, 80);
-  const cacheKey = `off:search:${await sha256(searchTerms)}`;
-
-  return getOrSet<HealthInfo | null>(cacheKey, 60 * 60 * 24 * 14, async () => {
-    // Try US endpoint first for regional food match, then fallback to World endpoint
-    const endpoints = [
-      "https://us.openfoodfacts.org/cgi/search.pl",
-      "https://world.openfoodfacts.org/cgi/search.pl"
-    ];
-
-    for (const endpoint of endpoints) {
-      try {
-        const url = new URL(endpoint);
-        url.searchParams.set("search_terms", searchTerms);
-        url.searchParams.set("search_simple", "1");
-        url.searchParams.set("action", "process");
-        url.searchParams.set("json", "1");
-        url.searchParams.set("page_size", "8");
-        url.searchParams.set(
-          "fields",
-          [
-            "product_name",
-            "brands",
-            "nutriscore_grade",
-            "nova_group",
-            "nutriments",
-            "serving_size",
-            "serving_quantity",
-            "ingredients_text",
-            "labels_tags",
-            "categories_tags",
-            "allergens_tags"
-          ].join(",")
-        );
-
-        const response = await fetch(url, {
-          headers: { "User-Agent": userAgent() },
-          next: { revalidate: 60 * 60 * 24 * 7 }
-        });
-        if (!response.ok) continue;
-
-        const data = (await response.json()) as { products?: OffProduct[] };
-        const products = data.products ?? [];
-        if (products.length === 0) continue;
-
-        // Rank candidates by term overlap
-        const ranked = products
-          .map((product) => ({
-            product,
-            confidence: matchConfidence(product, candidate, query)
-          }))
-          .sort((a, b) => {
-            const confRank = { high: 3, medium: 2, low: 1 };
-            return confRank[b.confidence] - confRank[a.confidence];
-          });
-
-        const best = ranked[0];
-        if (best && best.confidence !== "low") {
-          return fromOffProduct(best.product, best.confidence);
-        }
-
-        // Fallback: if there's any product returned with valid nutrition data, use it with fallback confidence
-        const fallback = products.find(
-          (p) => p.nutriments && (p.nutriments.proteins_100g !== undefined || p.nutriments.sugars_100g !== undefined || p.nutriscore_grade)
-        );
-        if (fallback) {
-          return fromOffProduct(fallback, "low");
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    return null;
-  });
-}
-
-function fromOffProduct(product: OffProduct, confidence: HealthInfo["confidence"]) {
+export function fromOffProduct(
+  product: OffProduct,
+  match: "barcode" | "text",
+): HealthInfo {
   const n = product.nutriments ?? {};
-  return classifyHealth({
+  const nutrient = (key: string) => {
+    const raw = n[`${key}_100g`];
+    const value =
+      typeof raw === "number"
+        ? raw
+        : typeof raw === "string" && /^\d+(?:\.\d+)?$/.test(raw)
+          ? Number(raw)
+          : undefined;
+    return value !== undefined && Number.isFinite(value) && value >= 0
+      ? value
+      : undefined;
+  };
+  const health = classifyHealth({
     nutriScore: product.nutriscore_grade,
     novaGroup: product.nova_group,
-    confidence,
+    confidence: match === "barcode" ? "high" : "medium",
     nutrition: {
-      protein100g: parseNutrient(n.proteins_100g ?? n.proteins),
-      sugars100g: parseNutrient(n.sugars_100g ?? n.sugars),
-      sodium100g: parseNutrient(n.sodium_100g ?? n.sodium),
-      salt100g: parseNutrient(n.salt_100g ?? n.salt),
-      fiber100g: parseNutrient(n.fiber_100g ?? n.fiber),
-      energyKcal100g: parseNutrient(n["energy-kcal_100g"] ?? n["energy-kcal"]),
-      saturatedFat100g: parseNutrient(n["saturated-fat_100g"] ?? n["saturated-fat"])
+      protein100g: nutrient("proteins"),
+      sugars100g: nutrient("sugars"),
+      carbohydrates100g: nutrient("carbohydrates"),
+      sodium100g: nutrient("sodium"),
+      salt100g: nutrient("salt"),
+      fiber100g: nutrient("fiber"),
+      energyKcal100g: nutrient("energy-kcal"),
+      saturatedFat100g: nutrient("saturated-fat"),
     },
     servingSize: product.serving_size,
-    servingsPerContainer: product.serving_quantity ? null : undefined,
     ingredientsText: product.ingredients_text,
     labelsTags: product.labels_tags,
     categoriesTags: product.categories_tags,
-    allergensTags: product.allergens_tags
+    allergensTags: [
+      ...(product.allergens_tags ?? []),
+      ...(product.traces_tags ?? []),
+    ],
   });
+  const barcode = validBarcode(product.code);
+  return {
+    ...health,
+    availability: "matched",
+    source: {
+      provider: "open_food_facts",
+      barcode,
+      productName: product.product_name ?? "Barcode match",
+      match,
+      fetchedAt: new Date().toISOString(),
+      url: barcode
+        ? `https://world.openfoodfacts.org/product/${barcode}`
+        : undefined,
+    },
+  };
 }
-
-function parseNutrient(val: unknown): number | undefined {
-  if (typeof val === "number" && Number.isFinite(val)) return val;
-  if (typeof val === "string") {
-    const parsed = parseFloat(val);
-    if (Number.isFinite(parsed)) return parsed;
+async function getByBarcode(code: string) {
+  return getOrSet<OffProduct | null>(
+    `off:v4:barcode:${code}`,
+    86400 * 7,
+    async () => {
+      await reserveBudget("off:barcode", 15, 60000);
+      const url = new URL(
+        `https://world.openfoodfacts.org/api/v3/product/${code}.json`,
+      );
+      url.searchParams.set("fields", FIELDS);
+      try {
+        const data = await providerJson<{ product?: OffProduct }>(
+          url,
+          "Nutrition lookup",
+        );
+        return data.product &&
+          validBarcode(data.product.code)?.padStart(14, "0") ===
+            code.padStart(14, "0")
+          ? data.product
+          : null;
+      } catch (error) {
+        if (error instanceof ProviderError && error.status === 404) return null;
+        throw error;
+      }
+    },
+  );
+}
+async function searchCatalog(query: string) {
+  return getOrSet<OffProduct[]>(
+    `off:v4:us-search:${await sha256(normalizeQuery(query))}`,
+    86400,
+    async () => {
+      await reserveBudget("off:search", 10, 60000);
+      const url = new URL("https://world.openfoodfacts.org/cgi/search.pl");
+      for (const [key, value] of Object.entries({
+        search_terms: query,
+        search_simple: "1",
+        action: "process",
+        json: "1",
+        page_size: "50",
+        tagtype_0: "countries",
+        tag_contains_0: "contains",
+        tag_0: "united-states",
+        fields: FIELDS,
+      }))
+        url.searchParams.set(key, value);
+      const data = await providerJson<{ products?: OffProduct[] }>(
+        url,
+        "Nutrition search",
+      );
+      return (data.products ?? []).filter((p) =>
+        p.countries_tags?.includes("en:united-states"),
+      );
+    },
+  );
+}
+export async function enrichProducts(
+  candidates: ProductCandidate[],
+  query: string,
+  signal?: AbortSignal,
+): Promise<{
+  candidates: ProductCandidate[];
+  healthById: Map<string, HealthInfo>;
+  warnings: string[];
+}> {
+  const warnings = new Set<string>();
+  let catalog: OffProduct[] = [];
+  if (candidates.some((c) => !validBarcode(c.upc))) {
+    try {
+      signal?.throwIfAborted();
+      catalog = await searchCatalog(query);
+    } catch {
+      signal?.throwIfAborted();
+      warnings.add(
+        "Nutrition lookup is temporarily unavailable for some products; no missing data has been inferred.",
+      );
+    }
   }
-  return undefined;
+  const pairs = await mapConcurrent(candidates, 3, async (candidate) => {
+    signal?.throwIfAborted();
+    let matched: OffProduct | undefined;
+    let method: "barcode" | "text" = "text";
+    try {
+      if (validBarcode(candidate.upc)) {
+        matched = (await getByBarcode(candidate.upc!)) ?? undefined;
+        method = "barcode";
+      } else {
+        const matches = catalog.filter((product) =>
+          matchProduct(product, candidate),
+        );
+        const sameSize = matches.filter((product) =>
+          samePackage(
+            candidate.package ?? parsePackage(candidate.title),
+            parsePackage(product.quantity ?? ""),
+          ),
+        );
+        // Ambiguous matches are not evidence. Exact package matching can resolve a catalog barcode.
+        matched =
+          sameSize.length === 1
+            ? sameSize[0]
+            : matches.length === 1
+              ? matches[0]
+              : undefined;
+        if (matched && sameSize.length === 1 && validBarcode(matched.code))
+          candidate = { ...candidate, upc: matched.code };
+      }
+      return {
+        candidate,
+        health: matched
+          ? fromOffProduct(matched, method)
+          : unknown(warnings.size ? "unavailable" : "no_match"),
+      };
+    } catch {
+      signal?.throwIfAborted();
+      warnings.add(
+        "Some nutrition lookups were unavailable. Check the package for missing information.",
+      );
+      return { candidate, health: unknown("unavailable") };
+    }
+  });
+  return {
+    candidates: pairs.map((p) => p.candidate),
+    healthById: new Map(
+      pairs.map((p) => [p.candidate.providerProductId, p.health]),
+    ),
+    warnings: [...warnings],
+  };
 }
-
-function matchConfidence(product: OffProduct, candidate: ProductCandidate, query: string): HealthInfo["confidence"] {
-  const productHaystack = normalizeQuery([product.product_name, product.brands].filter(Boolean).join(" "));
-  const candidateTitle = normalizeQuery(candidate.title);
-  const candidateBrand = candidate.brand ? normalizeQuery(candidate.brand) : "";
-  const queryTerms = normalizeQuery(query).split(" ").filter((t) => t.length > 2);
-
-  // Check brand overlap
-  const brandMatch =
-    candidateBrand &&
-    productHaystack.split(" ").some((term) => term.length > 2 && candidateBrand.includes(term));
-
-  // Count title term overlap
-  const titleTerms = candidateTitle.split(" ").filter((t) => t.length > 2);
-  const titleOverlapCount = titleTerms.filter((term) => productHaystack.includes(term)).length;
-  const queryMatchCount = queryTerms.filter((term) => productHaystack.includes(term)).length;
-
-  if (brandMatch && (titleOverlapCount > 0 || queryMatchCount > 0)) return "high";
-  if (titleOverlapCount >= 2 || (titleOverlapCount >= 1 && queryMatchCount >= 1)) return "medium";
-  if (titleOverlapCount >= 1 || queryMatchCount >= 1) return "low";
-
-  return "low";
-}
-
-function userAgent() {
-  return "TheGoodBite/1.0 (contact: support@thegoodbite.app)";
+export async function getHealthForProduct(
+  candidate: ProductCandidate,
+  query: string,
+) {
+  return (await enrichProducts([candidate], query)).healthById.get(
+    candidate.providerProductId,
+  )!;
 }

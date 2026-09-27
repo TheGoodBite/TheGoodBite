@@ -64,6 +64,24 @@ export function scoreHealth(health: HealthInfo) {
   return score;
 }
 
+export function hasNutritionInfo(health?: HealthInfo | null): boolean {
+  if (!health) return false;
+  if (health.nutriScore !== "unknown" || health.novaGroup !== null) {
+    return true;
+  }
+  const n = health.nutrition;
+  if (!n) return false;
+  return (
+    n.protein100g !== undefined ||
+    n.sugars100g !== undefined ||
+    n.energyKcal100g !== undefined ||
+    n.sodium100g !== undefined ||
+    n.saturatedFat100g !== undefined ||
+    n.fiber100g !== undefined ||
+    n.salt100g !== undefined
+  );
+}
+
 function normalizeNutriScore(value: string | null | undefined): HealthInfo["nutriScore"] {
   const normalized = value?.toLowerCase();
   return normalized === "a" ||

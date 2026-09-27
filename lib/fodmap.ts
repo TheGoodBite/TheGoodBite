@@ -1,66 +1,116 @@
+import { containsTerm, withoutFreeClaims } from "@/lib/foodEvidence";
 import type { HealthInfo } from "@/lib/types";
 
-// High FODMAP terms derived from oseparovic/fodmap_list and Monash University guidelines
+// Potential FODMAP ingredient signals; not a validated serving-size database.
 export const HIGH_FODMAP_TERMS = {
   fructans_gos: [
-    "garlic", "onion", "shallot", "leek", "scallion", "wheat", "rye", "barley",
-    "inulin", "chicory", "cashew", "pistachio", "chamomile", "artichoke", "asparagus",
-    "beetroot", "brussels sprout", "cabbage", "fennel", "snow pea", "kidney bean",
-    "black bean", "chickpea", "lentil", "soybean", "baked bean"
+    "garlic",
+    "onion",
+    "shallot",
+    "leek",
+    "scallion",
+    "wheat",
+    "rye",
+    "barley",
+    "inulin",
+    "chicory",
+    "cashew",
+    "pistachio",
+    "chamomile",
+    "artichoke",
+    "asparagus",
+    "beetroot",
+    "brussels sprout",
+    "cabbage",
+    "fennel",
+    "snow pea",
+    "kidney bean",
+    "black bean",
+    "chickpea",
+    "lentil",
+    "soybean",
+    "baked bean",
   ],
   fructose: [
-    "high fructose corn syrup", "hfcs", "honey", "agave", "apple", "pear", "mango",
-    "watermelon", "fig", "cherry", "blackberry", "sugar snap pea"
+    "high fructose corn syrup",
+    "hfcs",
+    "honey",
+    "agave",
+    "apple",
+    "pear",
+    "mango",
+    "watermelon",
+    "fig",
+    "cherry",
+    "blackberry",
+    "sugar snap pea",
   ],
   polyols: [
-    "sorbitol", "mannitol", "xylitol", "maltitol", "erythritol", "isomalt",
-    "avocado", "cauliflower", "mushroom", "peach", "plum", "prune", "apricot", "nectarine"
+    "sorbitol",
+    "mannitol",
+    "xylitol",
+    "maltitol",
+    "erythritol",
+    "isomalt",
+    "avocado",
+    "cauliflower",
+    "mushroom",
+    "peach",
+    "plum",
+    "prune",
+    "apricot",
+    "nectarine",
   ],
   lactose: [
-    "milk", "condensed milk", "evaporated milk", "ice cream", "soft cheese",
-    "cottage cheese", "ricotta", "yogurt", "custard"
-  ]
+    "milk",
+    "condensed milk",
+    "evaporated milk",
+    "ice cream",
+    "soft cheese",
+    "cottage cheese",
+    "ricotta",
+    "yogurt",
+    "custard",
+  ],
 };
 
-const ALL_HIGH_FODMAP_KEYWORDS = Object.values(HIGH_FODMAP_TERMS).flat();
-
-export function evaluateFodmapFit(health: HealthInfo, title: string): {
-  score: number;
-  match: boolean;
-  detectedHighFodmap: string[];
-  warnings: string[];
-} {
-  const text = [
-    title,
-    health.ingredientsText ?? "",
-    ...(health.categoriesTags ?? [])
-  ].join(" ").toLowerCase();
-
-  const detected: string[] = [];
-
-  for (const term of ALL_HIGH_FODMAP_KEYWORDS) {
-    if (text.includes(term)) {
-      detected.push(term);
-    }
-  }
-
-  // Deduplicate
-  const uniqueDetected = Array.from(new Set(detected));
-
-  const match = uniqueDetected.length === 0;
-  const score = match ? 90 : Math.max(0, 80 - uniqueDetected.length * 25);
-  const warnings: string[] = [];
-
-  if (!match) {
-    warnings.push(`Contains high-FODMAP ingredients (${uniqueDetected.slice(0, 3).join(", ")})`);
-  } else {
-    warnings.push("FODMAP evaluation is heuristic (β Beta). Always check label.");
-  }
-
+// A keyword screen identifies possible conflicts, never serving-level clinical suitability.
+export function evaluateFodmapFit(health: HealthInfo, title: string) {
+  const labels = health.labelsTags.join(" ");
+  const certified = /\blow[- ]fodmap\b/i.test(labels);
+  const text = withoutFreeClaims(
+    [title, health.ingredientsText ?? ""].join(" "),
+    Object.values(HIGH_FODMAP_TERMS).flat(),
+  );
+  const lactoseFree = /\blactose[- ]free\b/i.test(
+    [title, labels, health.ingredientsText].join(" "),
+  );
+  const detected = Object.entries(HIGH_FODMAP_TERMS).flatMap(
+    ([group, terms]) =>
+      group === "lactose" && lactoseFree
+        ? []
+        : terms.filter((term) => containsTerm(text, term)),
+  );
+  const uniqueDetected = [...new Set(detected)];
+  const status = uniqueDetected.length
+    ? ("conflict" as const)
+    : certified
+      ? ("match" as const)
+      : ("unknown" as const);
   return {
-    score,
-    match,
+    status,
+    score: status === "conflict" ? 10 : status === "match" ? 90 : 45,
+    match: status === "match",
     detectedHighFodmap: uniqueDetected,
-    warnings
+    warnings:
+      status === "conflict"
+        ? [
+            `Possible high-FODMAP ingredients (${uniqueDetected.slice(0, 3).join(", ")}); suitability depends on serving size and preparation.`,
+          ]
+        : status === "match"
+          ? ["Low-FODMAP label found; check the package and serving guidance."]
+          : [
+              "FODMAP suitability unknown. Ingredient screening alone cannot establish a low-FODMAP serving.",
+            ],
   };
 }

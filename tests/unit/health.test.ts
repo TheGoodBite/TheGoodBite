@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scoreHealth, classifyHealth, UNKNOWN_HEALTH } from "@/lib/health";
+import { scoreHealth, classifyHealth, hasNutritionInfo, UNKNOWN_HEALTH } from "@/lib/health";
 import type { HealthInfo } from "@/lib/types";
 
 function makeHealth(overrides: Partial<HealthInfo>): HealthInfo {
@@ -93,5 +93,23 @@ describe("classifyHealth", () => {
     expect(h.nutrition.protein100g).toBe(12);
     expect(h.nutrition.sugars100g).toBe(4);
     expect(h.nutrition.sodium100g).toBe(0.2);
+  });
+});
+
+describe("hasNutritionInfo", () => {
+  it("returns true if nutriScore is present", () => {
+    expect(hasNutritionInfo(makeHealth({ nutriScore: "a" }))).toBe(true);
+  });
+
+  it("returns true if novaGroup is present", () => {
+    expect(hasNutritionInfo(makeHealth({ novaGroup: 1 }))).toBe(true);
+  });
+
+  it("returns true if any macro is present in nutrition object", () => {
+    expect(hasNutritionInfo(makeHealth({ nutrition: { protein100g: 10 } }))).toBe(true);
+  });
+
+  it("returns false for UNKNOWN_HEALTH with no nutrition macros", () => {
+    expect(hasNutritionInfo(UNKNOWN_HEALTH)).toBe(false);
   });
 });

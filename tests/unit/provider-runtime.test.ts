@@ -1,0 +1,150 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  vi.resetModules();
+});
+async function isolatedCache() {
+  vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
+  vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "");
+  return import("@/lib/cache");
+}
+describe("cache and budgets", () => {
+  it("coalesces simultaneous cache misses including null results", async () => {
+    const { getOrSet } = await isolatedCache();
+    const fetcher = vi.fn(async () => null);
+    expect(
+      await Promise.all([
+        getOrSet("same", 60, fetcher),
+        getOrSet("same", 60, fetcher),
+      ]),
+    ).toEqual([null, null]);
+    await getOrSet("same", 60, fetcher);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("does not cache failures as missing data", async () => {
+    const { getOrSet } = await isolatedCache();
+    const fetcher = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("timeout"))
+      .mockResolvedValueOnce({ ok: true });
+    await expect(getOrSet("error", 60, fetcher)).rejects.toThrow();
+    expect(await getOrSet("error", 60, fetcher)).toEqual({ ok: true });
+  });
+  it("refuses production requests when shared budgets are missing", async () => {
+    await isolatedCache();
+    vi.stubEnv("NODE_ENV", "production");
+    const { reserveBudget } = await import("@/lib/providerRuntime");
+    await expect(reserveBudget("test", 1, 60000)).rejects.toThrow(
+      "shared request-budget",
+    );
+  });
+  it("enforces rolling development budgets", async () => {
+    await isolatedCache();
+    vi.stubEnv("NODE_ENV", "development");
+    const { reserveBudget } = await import("@/lib/providerRuntime");
+    await reserveBudget("test", 2, 60000, 2);
+    await expect(reserveBudget("test", 2, 60000)).rejects.toThrow(
+      "budget reached",
+    );
+  });
+  it("does not serve fabricated products without a provider key", async () => {
+    await isolatedCache();
+    vi.stubEnv("SERPAPI_API_KEY", "");
+    const { searchGoogleShoppingProducts } =
+      await import("@/lib/providers/googleShopping");
+    await expect(searchGoogleShoppingProducts("milk", 10)).rejects.toThrow(
+      "not configured",
+    );
+  });
+  it("uses one US catalog query to enrich an entire grocery item", async () => {
+    await isolatedCache();
+    vi.stubEnv("NODE_ENV", "development");
+    const fetcher = vi.fn(async (_input: RequestInfo | URL) =>
+      Response.json({
+        products: [
+          {
+            code: "012345678905",
+            product_name: "Plain Greek Yogurt",
+            brands: "Fage",
+            quantity: "170 g",
+            countries_tags: ["en:united-states"],
+            nutriments: { proteins_100g: 10 },
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const { enrichProducts } = await import("@/lib/providers/openFoodFacts");
+    const candidates = Array.from({ length: 15 }, (_, i) => ({
+      provider: "test",
+      providerProductId: String(i),
+      title:
+        i === 0 ? "Fage Plain Greek Yogurt 6 oz" : `Other brand yogurt ${i}`,
+      estimatedPrice: 3,
+    }));
+    const result = await enrichProducts(candidates, "Greek yogurt");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(result.healthById.get("0")?.source?.productName).toBe(
+      "Plain Greek Yogurt",
+    );
+    expect(result.healthById.get("1")?.source).toBeUndefined();
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain("tag_0=united-states");
+  });
+  it("reports a failed catalog request without fabricating evidence", async () => {
+    await isolatedCache();
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("limited", { status: 429 })),
+    );
+    const { enrichProducts } = await import("@/lib/providers/openFoodFacts");
+    const result = await enrichProducts(
+      [
+        {
+          provider: "test",
+          providerProductId: "a",
+          title: "Milk",
+          estimatedPrice: 3,
+        },
+      ],
+      "milk",
+    );
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.healthById.get("a")?.availability).toBe("unavailable");
+  });
+  it.each(["missing", "mismatched"])(
+    "keeps a %s barcode unknown and caches the no-match",
+    async (kind) => {
+      await isolatedCache();
+      vi.stubEnv("NODE_ENV", "development");
+      const fetcher = vi.fn(async () =>
+        kind === "missing"
+          ? new Response("not found", { status: 404 })
+          : Response.json({
+              product: {
+                code: "4006381333931",
+                product_name: "Different item",
+              },
+            }),
+      );
+      vi.stubGlobal("fetch", fetcher);
+      const { enrichProducts } = await import("@/lib/providers/openFoodFacts");
+      const candidates = [
+        {
+          provider: "test",
+          providerProductId: "barcode",
+          title: "Yogurt",
+          upc: "012345678905",
+          estimatedPrice: 3,
+        },
+      ];
+      const result = await enrichProducts(candidates, "yogurt");
+      await enrichProducts(candidates, "yogurt");
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(result.healthById.get("barcode")?.availability).toBe("no_match");
+      expect(result.healthById.get("barcode")?.source).toBeUndefined();
+      expect(result.warnings).toEqual([]);
+    },
+  );
+});

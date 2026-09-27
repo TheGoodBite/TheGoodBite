@@ -33,7 +33,7 @@ export function extractTags(health: HealthInfo, title: string): ProductTag[] {
   ].join(" ").toLowerCase();
 
   // 1. Organic
-  if (text.includes("organic") || (health.labelsTags ?? []).some(t => t.includes("organic") || t.includes("bio"))) {
+  if ((/\borganic\b/.test(text) && !/\bnon[- ]organic\b/.test(text)) || (health.labelsTags ?? []).some(t => ["en:organic", "en:eu-organic", "en:usda-organic"].includes(t))) {
     tags.push({ id: "organic", label: "Organic", icon: "🌿", color: "green" });
   }
 
@@ -50,7 +50,7 @@ export function extractTags(health: HealthInfo, title: string): ProductTag[] {
   }
 
   // 4. Non-GMO
-  if (text.includes("non-gmo") || text.includes("gmo free") || (health.labelsTags ?? []).some(t => t.includes("gmo"))) {
+  if (text.includes("non-gmo") || text.includes("gmo free") || (health.labelsTags ?? []).some(t => ["en:non-gmo", "en:no-gmos", "en:non-gmo-project"].includes(t))) {
     tags.push({ id: "non_gmo", label: "Non-GMO", icon: "🧬", color: "blue" });
   }
 

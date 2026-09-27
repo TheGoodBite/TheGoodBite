@@ -1,98 +1,157 @@
 import { getOrSet } from "@/lib/cache";
 import type { ProductCandidate } from "@/lib/types";
-import { parseMoney, sha256 } from "@/lib/utils";
+import { sha256 } from "@/lib/utils";
+import { parsePackage, validBarcode } from "@/lib/products";
+import {
+  providerJson,
+  ProviderError,
+  reserveBudget,
+  setting,
+} from "@/lib/providerRuntime";
 
-type SerpApiShoppingResult = {
+type ShoppingResult = {
   product_id?: string;
-  position?: number;
   title?: string;
   source?: string;
   price?: string;
   extracted_price?: number;
+  currency?: string;
   thumbnail?: string;
   link?: string;
   product_link?: string;
+  brand?: string;
+  gtin?: string;
+  upc?: string;
 };
-
-export async function searchGoogleShoppingProducts(query: string, limit: number, location?: string) {
-  const cacheKey = `products:serpapi:${await sha256(JSON.stringify({ query, limit, location }))}`;
-  return getOrSet(cacheKey, 60 * 30, async () => {
-    if (!process.env.SERPAPI_API_KEY) {
-      return mockShoppingResults(query, limit);
-    }
-
-    const url = new URL("https://serpapi.com/search.json");
-    url.searchParams.set("engine", "google_shopping");
-    url.searchParams.set("q", query);
-    url.searchParams.set("gl", "us");
-    url.searchParams.set("hl", "en");
-    if (location) {
-      url.searchParams.set("location", location);
-    }
-    url.searchParams.set("api_key", process.env.SERPAPI_API_KEY);
-
-    const response = await fetch(url, { next: { revalidate: 1800 } });
-    if (!response.ok) {
-      throw new Error(`SerpAPI request failed with ${response.status}`);
-    }
-
-    const data = (await response.json()) as { shopping_results?: SerpApiShoppingResult[] };
-    return (data.shopping_results ?? [])
-      .slice(0, Math.max(limit, 10))
-      .map((result, index) => normalizeSerpApiResult(result, index))
-      .filter((candidate): candidate is ProductCandidate => Boolean(candidate));
+type Location = {
+  canonical_name: string;
+  country_code: string;
+  target_type?: string;
+  name?: string;
+};
+export async function resolveLocation(zip?: string): Promise<string> {
+  if (!zip) return "United States";
+  return getOrSet(`serp:location:${zip}`, 86400 * 30, async () => {
+    await reserveBudget("locations", 60, 60000);
+    const url = new URL("https://serpapi.com/locations.json");
+    url.searchParams.set("q", zip);
+    url.searchParams.set("limit", "10");
+    const locations = await providerJson<Location[]>(url, "Location lookup");
+    const location = locations.find(
+      (l) =>
+        l.country_code === "US" &&
+        l.canonical_name?.split(",").some((part) => part.trim() === zip),
+    );
+    if (!location)
+      throw new ProviderError(
+        "That ZIP code could not be resolved to a US search location.",
+        400,
+      );
+    return location.canonical_name;
   });
 }
-
-function normalizeSerpApiResult(result: SerpApiShoppingResult, index: number): ProductCandidate | null {
+export async function searchGoogleShoppingProducts(
+  query: string,
+  limit: number,
+  zip?: string,
+  signal?: AbortSignal,
+) {
+  if (!process.env.SERPAPI_API_KEY)
+    throw new ProviderError(
+      "Product search is not configured. A SerpAPI key is required.",
+    );
+  const location = await resolveLocation(zip);
+  return getOrSet(
+    `serp:v3:${await sha256(JSON.stringify({ query, limit, location }))}`,
+    1800,
+    async () => {
+      signal?.throwIfAborted();
+      await reserveBudget(
+        "serp:daily",
+        setting("SERPAPI_DAILY_REQUEST_LIMIT", 250),
+        86400000,
+      );
+      const url = new URL("https://serpapi.com/search.json");
+      for (const [key, value] of Object.entries({
+        engine: "google_shopping",
+        q: query,
+        gl: "us",
+        hl: "en",
+        location,
+        google_domain: "google.com",
+        api_key: process.env.SERPAPI_API_KEY!,
+      }))
+        url.searchParams.set(key, value);
+      // Shared cache work has its own deadline; cancellation stops scheduling subsequent work, not another user's identical lookup.
+      const data = await providerJson<{
+        shopping_results?: ShoppingResult[];
+        error?: string;
+      }>(url, "Shopping search", undefined, 9000);
+      if (data.error)
+        throw new ProviderError(
+          "Shopping search could not complete this query. Please try again.",
+        );
+      return (data.shopping_results ?? [])
+        .map(normalizeShoppingResult)
+        .filter((p): p is ProductCandidate => p !== null)
+        .slice(0, limit);
+    },
+  );
+}
+export function normalizeShoppingResult(
+  result: ShoppingResult,
+): ProductCandidate | null {
   if (!result.title) return null;
-
-  const estimatedPrice =
-    typeof result.extracted_price === "number" ? result.extracted_price : parseMoney(result.price);
-
+  // A country-biased search is not proof of currency or local availability.
+  const currency = result.currency?.toUpperCase();
+  const priceText = result.price?.trim() ?? "";
+  if (currency && currency !== "USD") return null;
+  if (
+    /(?:[€£¥₹]|\b(?:CAD|AUD|NZD|EUR|GBP|INR)\b|(?:CA|AU|NZ|C|A)\$)/i.test(
+      priceText,
+    )
+  )
+    return null;
+  const usd =
+    currency === "USD" ||
+    /^(?:US\s*)?\$\s*\d/.test(priceText) ||
+    /\bUSD\b/i.test(priceText);
+  const amount =
+    typeof result.extracted_price === "number"
+      ? result.extracted_price
+      : Number(priceText.replace(/(?:USD|US|\$|,)/g, "").trim());
+  const price = usd && Number.isFinite(amount) && amount > 0 ? amount : null;
+  const productUrl = [result.product_link, result.link].find(
+    (u) => u && /^https?:\/\//i.test(u),
+  );
+  const pack = parsePackage(result.title);
+  const observation =
+    price === null
+      ? undefined
+      : {
+          source: "shopping" as const,
+          amount: price,
+          currency: "USD" as const,
+          observedAt: new Date().toISOString(),
+          seller: result.source,
+          url: productUrl,
+        };
   return {
     provider: "serpapi_google_shopping",
-    providerProductId: result.product_id ?? `${result.title}-${index}`,
+    providerProductId: result.product_id ?? `${result.source}:${result.title}`,
     title: result.title,
-    brand: inferBrand(result.title),
+    brand: result.brand,
     imageUrl: result.thumbnail,
-    estimatedPrice,
-    productUrl: result.product_link ?? result.link,
+    estimatedPrice: price,
+    currency: usd ? "USD" : undefined,
+    market: "US-search",
+    package: pack,
+    packageSize: pack.size,
+    upc: validBarcode(result.gtin ?? result.upc),
+    productUrl,
     seller: result.source,
-    raw: result
+    offers: observation ? [observation] : [],
+    priceSource: observation?.source,
+    priceObservation: observation,
   };
-}
-
-function inferBrand(title: string) {
-  const firstChunk = title.split(/[-:,|]/)[0]?.trim();
-  if (!firstChunk) return undefined;
-  const words = firstChunk.split(/\s+/).slice(0, 3).join(" ");
-  return words.length > 2 ? words : undefined;
-}
-
-function mockShoppingResults(query: string, limit: number): ProductCandidate[] {
-  const base = [
-    { title: `Good & Gather ${query}`, price: 3.29, seller: "Target" },
-    { title: `Kroger ${query}`, price: 2.79, seller: "Kroger" },
-    { title: `Great Value ${query}`, price: 2.48, seller: "Walmart" },
-    { title: `Annie's Organic ${query}`, price: 4.19, seller: "Instacart" },
-    { title: `365 by Whole Foods ${query}`, price: 3.99, seller: "Amazon" },
-    { title: `Simple Truth ${query}`, price: 3.49, seller: "Kroger" },
-    { title: `Signature Select ${query}`, price: 2.99, seller: "Albertsons" },
-    { title: `Market Pantry ${query}`, price: 2.69, seller: "Target" },
-    { title: `Nature's Promise ${query}`, price: 4.49, seller: "Giant" },
-    { title: `Store Brand ${query}`, price: 1.99, seller: "Local grocer" }
-  ];
-
-  return base.slice(0, limit).map((item, index) => ({
-    provider: "mock_google_shopping",
-    providerProductId: `${query.toLowerCase().replace(/\W+/g, "-")}-${index}`,
-    title: item.title,
-    brand: inferBrand(item.title),
-    imageUrl: `https://placehold.co/480x360/f4f7f0/1d2a22?text=${encodeURIComponent(query)}`,
-    estimatedPrice: item.price,
-    seller: item.seller,
-    productUrl: "https://shopping.google.com/",
-    raw: item
-  }));
 }

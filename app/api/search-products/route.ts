@@ -1,124 +1,132 @@
 import { z } from "zod";
-import { ApiError, handleRouteError, requireUserAndEntitlement } from "@/lib/api";
-import { incrementDailyCounterBy } from "@/lib/cache";
-import { sanitizeDietModes } from "@/lib/dietModes";
-import { UNKNOWN_HEALTH } from "@/lib/health";
-import { getHealthForProduct } from "@/lib/providers/openFoodFacts";
-import { searchGoogleShoppingProducts } from "@/lib/providers/googleShopping";
-import { rankProducts } from "@/lib/scoring";
-import type { HealthInfo, SearchProductsResponse } from "@/lib/types";
+import { handleRouteError, requireUserAndEntitlement } from "@/lib/api";
+import {
+  ALLERGENS,
+  DIET_MODES,
+  type SearchEvent,
+  type SearchProductsResponse,
+} from "@/lib/types";
 import { normalizeQuery, sha256, uniqueStrings } from "@/lib/utils";
+import {
+  mapConcurrent,
+  ProviderError,
+  reserveBudget,
+} from "@/lib/providerRuntime";
+import { searchItem } from "@/lib/searchService";
 
-const schema = z.object({
-  items: z.array(z.string().min(1)).min(1).max(100),
-  dietModes: z.array(z.string()).optional(),
-  allergies: z.array(z.string()).optional(),
-  zipCode: z.string().regex(/^\d{5}$/).optional().or(z.literal("")),
-  limitPerItem: z.number().int().min(1).max(20).optional()
+export const runtime = "nodejs";
+export const maxDuration = 60;
+const searchSchema = z.object({
+  items: z.array(z.string().trim().min(1).max(160)).min(1).max(100),
+  dietModes: z.array(z.enum(DIET_MODES)).max(DIET_MODES.length).default([]),
+  allergies: z.array(z.enum(ALLERGENS)).max(ALLERGENS.length).default([]),
+  zipCode: z
+    .string()
+    .regex(/^\d{5}$/)
+    .optional()
+    .or(z.literal("")),
+  bulkPreference: z.enum(["everyday", "bulk", "any"]).default("everyday"),
+  limitPerItem: z.number().int().min(1).max(20).default(10),
 });
-
+const disclaimer =
+  "Prices are estimates or dated observations, not confirmed local shelf prices. Verify ingredients and allergens on the package.";
 export async function POST(request: Request) {
   try {
     const { user, entitlement } = await requireUserAndEntitlement(request);
-    const body = schema.parse(await request.json());
-    const items = uniqueStrings(body.items.map(normalizeQuery)).slice(0, entitlement.searchItemLimitPerDay);
-
-    if (items.length === 0) throw new ApiError("Add at least one grocery item.", 400);
-
-    await enforceDailyLimit(user.id, items.length, entitlement.searchItemLimitPerDay);
-
-    const dietModes = sanitizeDietModes(body.dietModes);
-    const allergies = (body.allergies ?? []) as any[];
-    const zipCode = body.zipCode && body.zipCode.trim().length === 5 ? body.zipCode.trim() : undefined;
-    const limit = Math.min(body.limitPerItem ?? entitlement.optionsPerItem, entitlement.optionsPerItem);
-
-    const settled = await Promise.allSettled(
-      items.map(async (item) => {
-        const rawCandidates = await searchGoogleShoppingProducts(item, Math.max(limit, 15), zipCode);
-        const candidates = deduplicateCandidates(rawCandidates);
-        const healthEntries = await Promise.all(
-          candidates.map(async (candidate) => {
-            let health: HealthInfo = UNKNOWN_HEALTH;
-            try {
-              health = await getHealthForProduct(candidate, item);
-            } catch {
-              health = UNKNOWN_HEALTH;
-            }
-            return [candidate.providerProductId, health] as const;
-          })
-        );
-
-        return {
-          query: item,
-          options: rankProducts({
-            query: item,
-            candidates,
-            healthById: new Map(healthEntries),
-            dietModes,
-            allergies,
-            limit
-          })
-        };
-      })
+    const body = searchSchema.parse(await request.json());
+    const items = uniqueStrings(body.items.map(normalizeQuery));
+    const userKey = await sha256(user.id);
+    await reserveBudget(`user:burst:${userKey}`, 10, 60000);
+    await reserveBudget(
+      `user:daily:${userKey}`,
+      entitlement.searchItemLimitPerDay,
+      86400000,
+      items.length,
     );
-
-    const response: SearchProductsResponse = {
-      items: settled.map((result, index) => {
-        if (result.status === "fulfilled") return result.value;
-        return {
-          query: items[index],
-          options: [],
-          error: result.reason instanceof Error ? result.reason.message : "Search failed for this item."
-        };
-      }),
-      entitlement: {
-        isPaid: entitlement.isPaid,
-        optionsPerItem: entitlement.optionsPerItem,
-        canUseDietModes: entitlement.canUseDietModes,
-        searchItemLimitPerDay: entitlement.searchItemLimitPerDay
-      },
-      disclaimer: "Prices are estimates from shopping results, not confirmed local shelf prices."
+    const abort = new AbortController();
+    const signal = AbortSignal.any([
+      request.signal,
+      abort.signal,
+      AbortSignal.timeout(45000),
+    ]);
+    const meta: SearchProductsResponse["entitlement"] = {
+      isPaid: entitlement.isPaid,
+      optionsPerItem: entitlement.optionsPerItem,
+      canUseDietModes: entitlement.canUseDietModes,
+      searchItemLimitPerDay: entitlement.searchItemLimitPerDay,
     };
-
-    return Response.json(response);
+    const run = (emit?: (event: SearchEvent) => void) =>
+      mapConcurrent(items, 4, async (query) => {
+        let item: SearchProductsResponse["items"][number];
+        try {
+          item = await searchItem(
+            query,
+            {
+              ...body,
+              zipCode: body.zipCode || undefined,
+              limitPerItem: Math.min(
+                body.limitPerItem,
+                entitlement.optionsPerItem,
+              ),
+            },
+            signal,
+          );
+        } catch (error) {
+          item = {
+            query,
+            options: [],
+            error: signal.aborted
+              ? "Search timed out or was canceled. Retry this item."
+              : error instanceof ProviderError
+                ? error.message
+                : "This item could not be searched. Please try again.",
+          };
+        }
+        emit?.({ type: "item", item });
+        return item;
+      });
+    if (!request.headers.get("accept")?.includes("application/x-ndjson"))
+      return Response.json(
+        { items: await run(), entitlement: meta, disclaimer },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    const encoder = new TextEncoder();
+    let closed = false;
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const emit = (event: SearchEvent) => {
+          if (!closed && !request.signal.aborted)
+            controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+        };
+        try {
+          emit({ type: "meta", entitlement: meta, disclaimer });
+          await run(emit);
+          emit({ type: "done" });
+        } catch {
+          emit({
+            type: "error",
+            error: "Search stopped unexpectedly. Retry unfinished items.",
+          });
+        } finally {
+          if (!closed) {
+            closed = true;
+            controller.close();
+          }
+        }
+      },
+      cancel() {
+        closed = true;
+        abort.abort();
+      },
+    });
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson",
+        "Cache-Control": "no-store, no-transform",
+        "X-Accel-Buffering": "no",
+      },
+    });
   } catch (error) {
     return handleRouteError(error);
   }
-}
-
-async function enforceDailyLimit(userId: string, itemCount: number, limit: number) {
-  const day = new Date().toISOString().slice(0, 10);
-  const key = `usage:search-items:${userId}:${day}`;
-  const hash = await sha256(key);
-  const count = await incrementDailyCounterBy(`usage:${hash}`, itemCount, 60 * 60 * 30);
-
-  if (count !== null && count > limit) {
-    throw new ApiError(`Daily search limit reached. Paid users get higher limits.`, 402);
-  }
-}
-
-function deduplicateCandidates(candidates: Array<import("@/lib/types").ProductCandidate>) {
-  const seen = new Map<string, import("@/lib/types").ProductCandidate>();
-
-  for (const candidate of candidates) {
-    const normTitle = candidate.title
-      .toLowerCase()
-      .replace(/[^\w\s]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    if (!seen.has(normTitle)) {
-      seen.set(normTitle, candidate);
-    } else {
-      const existing = seen.get(normTitle)!;
-      if (
-        candidate.estimatedPrice !== null &&
-        (existing.estimatedPrice === null || candidate.estimatedPrice < existing.estimatedPrice)
-      ) {
-        seen.set(normTitle, candidate);
-      }
-    }
-  }
-
-  return Array.from(seen.values());
 }

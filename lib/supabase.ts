@@ -36,7 +36,7 @@ export async function getUserFromRequest(request: Request): Promise<AuthUser | n
   const supabase = createServerSupabaseClient();
   if (!supabase) {
     if (process.env.NODE_ENV !== "production" && token === "dev-token") {
-      return { id: "00000000-0000-4000-8000-000000000001", email: "dev@onlygoodbites.local" };
+      return { id: "00000000-0000-4000-8000-000000000001", email: "dev@meezany.local" };
     }
     return null;
   }

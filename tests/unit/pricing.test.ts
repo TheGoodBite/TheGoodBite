@@ -14,10 +14,8 @@ describe("computePricePerServing", () => {
     expect(result?.pricePerUnit).toBe(0.40);
   });
 
-  it("calculates price per serving from title pack count", () => {
+  it("does not mistake a package count for servings", () => {
     const result = computePricePerServing(6.00, undefined, undefined, "Granola Protein Bars (12 pack)");
-    expect(result).not.toBeNull();
-    expect(result?.formatted).toBe("$0.50 / serving");
-    expect(result?.pricePerUnit).toBe(0.50);
+    expect(result).toBeNull();
   });
 });

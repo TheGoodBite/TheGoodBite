@@ -10,7 +10,7 @@ export const DIET_MODES = [
   "heart_conscious",
   "weight_loss_friendly",
   "kid_friendly",
-  "fodmap"
+  "fodmap",
 ] as const;
 
 export type DietMode = (typeof DIET_MODES)[number];
@@ -24,18 +24,13 @@ export const ALLERGENS = [
   "soy",
   "shellfish",
   "fish",
-  "sesame"
+  "sesame",
 ] as const;
 
 export type Allergen = (typeof ALLERGENS)[number];
 
 export type SubscriptionStatus =
-  | "free"
-  | "active"
-  | "trialing"
-  | "past_due"
-  | "canceled"
-  | "unpaid";
+  "free" | "active" | "trialing" | "past_due" | "canceled" | "unpaid";
 
 export type Entitlement = {
   isPaid: boolean;
@@ -47,6 +42,25 @@ export type Entitlement = {
   subscriptionStatus: SubscriptionStatus;
 };
 
+export type PriceObservation = {
+  source: "shopping" | "open_prices";
+  amount: number;
+  currency: "USD";
+  observedAt: string;
+  seller?: string;
+  url?: string;
+  country?: "US";
+  locality?: string;
+};
+export type PackageInfo = {
+  size?: string;
+  count?: number;
+  quantity?: number;
+  unit?: "g" | "ml";
+  bulk: boolean;
+  ambiguous?: boolean;
+};
+export type EvidenceState = "match" | "conflict" | "unknown";
 export type ProductCandidate = {
   provider: string;
   providerProductId: string;
@@ -58,6 +72,13 @@ export type ProductCandidate = {
   upc?: string;
   productUrl?: string;
   seller?: string;
+  currency?: "USD";
+  market?: "US-search";
+  package?: PackageInfo;
+  offers?: PriceObservation[];
+  priceSource?: "shopping" | "open_prices";
+  priceObservation?: PriceObservation;
+  unitPrice?: { amount: number; unit: "100g" | "100ml" };
   raw?: unknown;
 };
 
@@ -76,6 +97,15 @@ export type HealthInfo = {
     energyKcal100g?: number;
     saturatedFat100g?: number;
   };
+  source?: {
+    provider: "open_food_facts";
+    barcode?: string;
+    productName: string;
+    url?: string;
+    match: "barcode" | "text";
+    fetchedAt: string;
+  };
+  availability?: "matched" | "no_match" | "unavailable";
   servingSize?: string;
   servingsPerContainer?: number | null;
   ingredientsText?: string;
@@ -88,6 +118,7 @@ export type DietFit = {
   score: number;
   matchedModes: DietMode[];
   warnings: string[];
+  evidence?: Partial<Record<DietMode, EvidenceState>>;
 };
 
 export type RankedProduct = ProductCandidate & {
@@ -102,6 +133,7 @@ export type RankedProduct = ProductCandidate & {
   health: HealthInfo;
   dietFit: DietFit;
   explanation: string;
+  allergyStatus?: "conflict" | "unknown" | "not_detected";
 };
 
 export type SearchProductsRequest = {
@@ -110,6 +142,7 @@ export type SearchProductsRequest = {
   allergies?: Allergen[];
   zipCode?: string;
   limitPerItem?: number;
+  bulkPreference?: "everyday" | "bulk" | "any";
 };
 
 export type SearchProductsResponse = {
@@ -117,6 +150,8 @@ export type SearchProductsResponse = {
     query: string;
     options: RankedProduct[];
     error?: string;
+    warnings?: string[];
+    excludedCount?: number;
   }>;
   entitlement: Pick<
     Entitlement,
@@ -129,3 +164,13 @@ export type AuthUser = {
   id: string;
   email?: string;
 };
+
+export type SearchEvent =
+  | {
+      type: "meta";
+      entitlement: SearchProductsResponse["entitlement"];
+      disclaimer: string;
+    }
+  | { type: "item"; item: SearchProductsResponse["items"][number] }
+  | { type: "done" }
+  | { type: "error"; error: string };

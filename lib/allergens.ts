@@ -1,67 +1,124 @@
+import { containsTerm, withoutFreeClaims } from "@/lib/foodEvidence";
 import type { Allergen, HealthInfo } from "@/lib/types";
 
-export const ALLERGEN_DETAILS: Record<Allergen, { label: string; icon: string; keywords: string[]; tags: string[] }> = {
+export const ALLERGEN_DETAILS: Record<
+  Allergen,
+  { label: string; icon: string; keywords: string[]; tags: string[] }
+> = {
   peanuts: {
     label: "Peanuts",
     icon: "🥜",
     keywords: ["peanut", "groundnut", "arachis"],
-    tags: ["en:peanuts"]
+    tags: ["en:peanuts"],
   },
   tree_nuts: {
     label: "Tree Nuts",
     icon: "🌰",
-    keywords: ["almond", "cashew", "walnut", "pecan", "pistachio", "macadamia", "hazelnut", "brazil nut", "chestnut"],
-    tags: ["en:nuts", "en:almonds", "en:cashews", "en:hazelnuts", "en:walnuts", "en:pistachios", "en:pecan-nuts"]
+    keywords: [
+      "almond",
+      "cashew",
+      "walnut",
+      "pecan",
+      "pistachio",
+      "macadamia",
+      "hazelnut",
+      "brazil nut",
+      "chestnut",
+    ],
+    tags: [
+      "en:nuts",
+      "en:almonds",
+      "en:cashews",
+      "en:hazelnuts",
+      "en:walnuts",
+      "en:pistachios",
+      "en:pecan-nuts",
+    ],
   },
   dairy: {
     label: "Dairy / Milk",
     icon: "🥛",
-    keywords: ["milk", "dairy", "butter", "cheese", "cream", "whey", "casein", "lactose", "yogurt"],
-    tags: ["en:milk", "en:lactose"]
+    keywords: [
+      "milk",
+      "dairy",
+      "butter",
+      "cheese",
+      "cream",
+      "whey",
+      "casein",
+      "lactose",
+      "yogurt",
+    ],
+    tags: ["en:milk", "en:lactose"],
   },
   eggs: {
     label: "Eggs",
     icon: "🥚",
     keywords: ["egg", "albumin", "yolk", "mayonnaise", "ovalbumin"],
-    tags: ["en:eggs"]
+    tags: ["en:eggs"],
   },
   wheat: {
     label: "Wheat",
     icon: "🌾",
-    keywords: ["wheat", "gluten", "semolina", "spelt", "farro", "kamut", "flour"],
-    tags: ["en:gluten", "en:wheat"]
+    keywords: ["wheat", "gluten", "semolina", "spelt", "farro", "kamut"],
+    tags: ["en:gluten", "en:wheat"],
   },
   soy: {
     label: "Soy",
     icon: "🫘",
-    keywords: ["soy", "soya", "soybean", "tofu", "edamame", "lecithin"],
-    tags: ["en:soybeans"]
+    keywords: ["soy", "soya", "soybean", "tofu", "edamame"],
+    tags: ["en:soybeans"],
   },
   shellfish: {
     label: "Shellfish",
     icon: "🦞",
-    keywords: ["shrimp", "crab", "lobster", "prawn", "clam", "mussel", "oyster", "scallop", "crawfish"],
-    tags: ["en:crustaceans", "en:molluscs"]
+    keywords: [
+      "shrimp",
+      "crab",
+      "lobster",
+      "prawn",
+      "clam",
+      "mussel",
+      "oyster",
+      "scallop",
+      "crawfish",
+    ],
+    tags: ["en:crustaceans", "en:molluscs"],
   },
   fish: {
     label: "Fish",
     icon: "🐟",
-    keywords: ["fish", "salmon", "tuna", "cod", "anchovy", "sardine", "trout", "halibut", "tilapia", "haddock"],
-    tags: ["en:fish"]
+    keywords: [
+      "fish",
+      "salmon",
+      "tuna",
+      "cod",
+      "anchovy",
+      "sardine",
+      "trout",
+      "halibut",
+      "tilapia",
+      "haddock",
+    ],
+    tags: ["en:fish"],
   },
   sesame: {
     label: "Sesame",
     icon: "🌱",
     keywords: ["sesame", "tahini", "benne"],
-    tags: ["en:sesame-seeds"]
-  }
+    tags: ["en:sesame-seeds"],
+  },
 };
 
-export function checkAllergens(health: HealthInfo, title: string, selectedAllergens: Allergen[]): Allergen[] {
+export function checkAllergens(
+  health: HealthInfo,
+  title: string,
+  selectedAllergens: Allergen[],
+): Allergen[] {
   if (!selectedAllergens || selectedAllergens.length === 0) return [];
 
   const matched: Allergen[] = [];
-  const text = [title, health.ingredientsText ?? ""].join(" ").toLowerCase();
+  const ingredientText = health.ingredientsText ?? "";
   const offTags = health.allergensTags ?? [];
 
   for (const allergen of selectedAllergens) {
@@ -69,9 +126,24 @@ export function checkAllergens(health: HealthInfo, title: string, selectedAllerg
     if (!info) continue;
 
     // Check OFF tag matches
-    const tagMatch = info.tags.some(tag => offTags.some(t => t.includes(tag.replace("en:", ""))));
+    const tagMatch = info.tags.some((tag) =>
+      offTags.some((t) => t.replace(/^en:/, "") === tag.replace(/^en:/, "")),
+    );
     // Check keyword text matches in title or ingredient text
-    const textMatch = info.keywords.some(kw => text.includes(kw));
+    const clean = (value: string) => {
+      let text = withoutFreeClaims(value, info.keywords);
+      if (allergen === "dairy")
+        text = text.replace(
+          /\b(?:almond|oat|soy|rice|coconut|cashew)[ -]milk\b|\b(?:peanut|almond|cocoa|shea)[ -]butter\b/gi,
+          " ",
+        );
+      return text;
+    };
+    const textMatch = info.keywords.some(
+      (kw) =>
+        containsTerm(clean(ingredientText), kw) ||
+        containsTerm(clean(title), kw),
+    );
 
     if (tagMatch || textMatch) {
       matched.push(allergen);

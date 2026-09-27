@@ -1,5 +1,11 @@
+import { containsTerm, withoutFreeClaims } from "@/lib/foodEvidence";
 import { evaluateFodmapFit } from "@/lib/fodmap";
-import { DIET_MODES, type DietMode, type HealthInfo } from "@/lib/types";
+import {
+  DIET_MODES,
+  type DietMode,
+  type HealthInfo,
+  type EvidenceState,
+} from "@/lib/types";
 
 export function isDietMode(value: string): value is DietMode {
   return (DIET_MODES as readonly string[]).includes(value);
@@ -7,36 +13,79 @@ export function isDietMode(value: string): value is DietMode {
 
 export function sanitizeDietModes(values: unknown): DietMode[] {
   if (!Array.isArray(values)) return [];
-  return values.filter((value): value is DietMode => typeof value === "string" && isDietMode(value));
+  return values.filter(
+    (value): value is DietMode =>
+      typeof value === "string" && isDietMode(value),
+  );
 }
 
-export function scoreDietFit(health: HealthInfo, modes: DietMode[], title: string = "") {
+export function scoreDietFit(
+  health: HealthInfo,
+  modes: DietMode[],
+  title: string = "",
+) {
   if (modes.length === 0) {
-    return { score: 0, matchedModes: [] as DietMode[], warnings: [] as string[] };
+    return {
+      score: 0,
+      matchedModes: [] as DietMode[],
+      warnings: [] as string[],
+    };
   }
 
   const scoreParts = modes.map((mode) => scoreOneMode(health, mode, title));
-  const score = Math.round(scoreParts.reduce((sum, part) => sum + part.score, 0) / modes.length);
+  const score = Math.round(
+    scoreParts.reduce((sum, part) => sum + part.score, 0) / modes.length,
+  );
 
   return {
     score,
-    matchedModes: scoreParts.filter((part) => part.match).map((part) => part.mode),
-    warnings: scoreParts.flatMap((part) => part.warnings).slice(0, 4)
+    matchedModes: scoreParts
+      .filter((part) => part.match)
+      .map((part) => part.mode),
+    warnings: scoreParts.flatMap((part) => part.warnings),
+    evidence: Object.fromEntries(
+      scoreParts.map((part) => [part.mode, part.status]),
+    ),
   };
 }
 
 function scoreOneMode(health: HealthInfo, mode: DietMode, title: string) {
   const n = health.nutrition;
-  const text = [health.ingredientsText, health.labelsTags.join(" "), health.categoriesTags.join(" ")]
+  const text = [health.ingredientsText, health.labelsTags.join(" ")]
     .join(" ")
     .toLowerCase();
   const warnings: string[] = [];
+  const required: Partial<Record<DietMode, (keyof HealthInfo["nutrition"])[]>> =
+    {
+      high_protein: ["protein100g"],
+      low_sugar: ["sugars100g"],
+      diabetes_conscious: ["sugars100g"],
+      low_carb: ["carbohydrates100g"],
+      low_sodium: ["sodium100g"],
+      heart_conscious: ["sodium100g", "saturatedFat100g"],
+      weight_loss_friendly: ["protein100g", "fiber100g", "energyKcal100g"],
+      kid_friendly: ["sugars100g", "sodium100g"],
+    };
+  if (required[mode]?.some((key) => n[key] == null))
+    return {
+      mode,
+      score: 45,
+      match: false,
+      warnings: ["Nutrition evidence missing for " + mode.replaceAll("_", " ")],
+      status: "unknown" as EvidenceState,
+    };
   let score = 50;
   let match = false;
 
   if (mode === "fodmap") {
     const res = evaluateFodmapFit(health, title);
-    return { mode, score: res.score, match: res.match, warnings: res.warnings };
+    return {
+      mode,
+      score: res.score,
+      match: res.match,
+      warnings: res.warnings,
+      status: res.status,
+    };
   }
 
   if (mode === "high_protein") {
@@ -46,7 +95,12 @@ function scoreOneMode(health: HealthInfo, mode: DietMode, title: string) {
   }
 
   if (mode === "low_sugar" || mode === "diabetes_conscious") {
-    score = scoreNumber(n.sugars100g, 2, mode === "diabetes_conscious" ? 8 : 12, false);
+    score = scoreNumber(
+      n.sugars100g,
+      2,
+      mode === "diabetes_conscious" ? 8 : 12,
+      false,
+    );
     match = (n.sugars100g ?? 99) <= (mode === "diabetes_conscious" ? 6 : 10);
     if (!match) warnings.push("Higher sugar");
   }
@@ -91,29 +145,86 @@ function scoreOneMode(health: HealthInfo, mode: DietMode, title: string) {
   if (mode === "vegetarian" || mode === "vegan") {
     const animalTerms =
       mode === "vegan"
-        ? ["beef", "chicken", "pork", "fish", "gelatin", "milk", "cheese", "egg", "honey", "whey", "casein"]
+        ? [
+            "beef",
+            "chicken",
+            "pork",
+            "fish",
+            "gelatin",
+            "milk",
+            "cheese",
+            "egg",
+            "honey",
+            "whey",
+            "casein",
+          ]
         : ["beef", "chicken", "pork", "fish", "gelatin"];
-    const hasAnimalTerm = animalTerms.some((term) => text.includes(term));
-    const hasPositiveLabel = text.includes(mode) || text.includes(`${mode}-`);
+    const ingredientEvidence = (health.ingredientsText ?? "").replace(
+      /\b(?:almond|oat|soy|rice|coconut|cashew)[ -]milk\b|\b(?:peanut|almond|cocoa|shea)[ -]butter\b/gi,
+      " ",
+    );
+    const titleEvidence =
+      /\b(?:vegan|vegetarian|plant[- ]based|meatless)\b/i.test(title)
+        ? ""
+        : title;
+    const hasAnimalTerm = animalTerms.some((term) =>
+      containsTerm(
+        withoutFreeClaims(
+          [ingredientEvidence, titleEvidence].join(" "),
+          animalTerms,
+        ),
+        term,
+      ),
+    );
+    const hasPositiveLabel = health.labelsTags.some(
+      (label) => label.replace(/^en:/, "") === mode,
+    );
     score = hasAnimalTerm ? 0 : hasPositiveLabel ? 100 : 65;
-    match = !hasAnimalTerm && (hasPositiveLabel || mode === "vegetarian");
-    if (hasAnimalTerm) warnings.push(mode === "vegan" ? "Likely not vegan" : "Likely not vegetarian");
+    match = !hasAnimalTerm && hasPositiveLabel;
+    if (hasAnimalTerm)
+      warnings.push(
+        mode === "vegan" ? "Likely not vegan" : "Likely not vegetarian",
+      );
   }
 
   if (mode === "gluten_free") {
     const glutenTerms = ["wheat", "barley", "rye", "malt", "gluten"];
-    const hasGluten = glutenTerms.some((term) => text.includes(term));
-    const hasLabel = text.includes("gluten-free") || text.includes("gluten free");
+    const hasGluten = glutenTerms.some((term) =>
+      containsTerm(
+        withoutFreeClaims(health.ingredientsText ?? "", ["gluten"]),
+        term,
+      ),
+    );
+    const hasLabel = health.labelsTags.some(
+      (label) => label.replace(/^en:/, "") === "gluten-free",
+    );
     score = hasGluten && !hasLabel ? 0 : hasLabel ? 100 : 60;
     match = hasLabel;
     if (hasGluten && !hasLabel) warnings.push("Likely contains gluten");
   }
 
-  return { mode, score, match, warnings };
+  const categorical = ["vegan", "vegetarian", "gluten_free"].includes(mode);
+  const status: EvidenceState = match
+    ? "match"
+    : categorical && !warnings.length
+      ? "unknown"
+      : "conflict";
+  if (status === "unknown") {
+    score = 45;
+    warnings.push("Not enough evidence to verify " + mode.replaceAll("_", " "));
+  }
+  return { mode, score, match, warnings, status };
 }
 
-function scoreNumber(value: number | undefined, good: number, bad: number, higherIsBetter: boolean) {
+function scoreNumber(
+  value: number | undefined,
+  good: number,
+  bad: number,
+  higherIsBetter: boolean,
+) {
   if (value === undefined || !Number.isFinite(value)) return 45;
-  const raw = higherIsBetter ? (value - good) / (bad - good) : (bad - value) / (bad - good);
+  const raw = higherIsBetter
+    ? (value - good) / (bad - good)
+    : (bad - value) / (bad - good);
   return Math.round(Math.max(0, Math.min(1, raw)) * 100);
 }
