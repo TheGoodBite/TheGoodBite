@@ -46,10 +46,10 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   // Score styling
   const scoreColor =
     product.overallScore >= 80
-      ? "text-emerald-700 bg-emerald-100 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800"
+      ? "text-emerald-800 bg-emerald-50 border-emerald-200"
       : product.overallScore >= 55
-      ? "text-amber-700 bg-amber-100 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800"
-      : "text-rose-700 bg-rose-100 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800";
+      ? "text-amber-800 bg-amber-50 border-amber-200"
+      : "text-rose-800 bg-rose-50 border-rose-200";
 
   // Positives & Negatives (Yuka style)
   const positives: { label: string; detail: string }[] = [];
@@ -93,23 +93,23 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/60 backdrop-blur-md p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-md p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[90vh] flex flex-col my-auto"
+        className="relative w-full max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-black/[0.06] overflow-hidden max-h-[90vh] flex flex-col my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}
-        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-100 dark:border-slate-800">
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-white/90 backdrop-blur-md border-b border-stone-100">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#166534] bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
               The Good Bite Details
             </span>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-2 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-100 transition-colors"
             aria-label="Close modal"
           >
             <X className="w-5 h-5" />
@@ -121,7 +121,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           {/* Main Info Hero */}
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
             {/* Image */}
-            <div className="relative w-36 h-36 shrink-0 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-2 flex items-center justify-center overflow-hidden shadow-sm">
+            <div className="relative w-36 h-36 shrink-0 rounded-2xl border border-stone-200 bg-white p-2 flex items-center justify-center overflow-hidden shadow-sm">
               {product.imageUrl ? (
                 // eslint-disable-next-next/no-img-element
                 <img
@@ -134,7 +134,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   }}
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-300 dark:text-slate-700">
+                <div className="w-full h-full flex items-center justify-center text-slate-300">
                   🥦
                 </div>
               )}
@@ -143,27 +143,27 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             {/* Title & Price */}
             <div className="flex-1 text-center sm:text-left space-y-2">
               {product.brand && (
-                <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+                <p className="text-xs font-semibold text-[#166534] uppercase tracking-wide">
                   {product.brand}
                 </p>
               )}
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white leading-snug">
+              <h2 className="text-xl font-bold text-[#1D1D1F] leading-snug">
                 {product.title}
               </h2>
 
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 pt-1">
                 {product.estimatedPrice !== null && (
-                  <span className="text-2xl font-extrabold text-slate-900 dark:text-white">
+                  <span className="font-num text-2xl font-extrabold text-[#1D1D1F]">
                     ${product.estimatedPrice.toFixed(2)}
                   </span>
                 )}
                 {priceServing && (
-                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800">
+                  <span className="text-xs font-medium text-[#166534] bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
                     {priceServing.formatted}
                   </span>
                 )}
                 {product.seller && (
-                  <span className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md">
+                  <span className="text-xs text-[#86868B] bg-stone-100 px-2.5 py-1 rounded-md">
                     via {product.seller}
                   </span>
                 )}
@@ -173,7 +173,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
           {/* Allergy Warning Banner */}
           {matchedAllergens.length > 0 && (
-            <div className="p-4 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 rounded-2xl flex items-start gap-3 text-rose-800 dark:text-rose-200">
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3 text-rose-900">
               <ShieldAlert className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
               <div>
                 <h4 className="font-bold text-sm">Allergen Alert Detected</h4>
@@ -190,20 +190,20 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           {/* Overall Health & Diet Score Card */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className={`p-5 rounded-2xl border flex flex-col items-center justify-center text-center ${scoreColor}`}>
-              <span className="text-4xl font-extrabold tracking-tight">{product.overallScore}</span>
+              <span className="font-num text-4xl font-extrabold tracking-tight">{product.overallScore}</span>
               <span className="text-xs font-medium mt-1 opacity-80 uppercase tracking-wider">Overall GoodBite Score</span>
             </div>
 
-            <div className="sm:col-span-2 p-5 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col justify-center space-y-1">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
-                <Sparkles className="w-4 h-4 text-emerald-600" />
+            <div className="sm:col-span-2 p-5 rounded-2xl bg-[#F5F5F7] border border-black/[0.04] flex flex-col justify-center space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-[#1D1D1F]">
+                <Sparkles className="w-4 h-4 text-[#166534]" />
                 <span>AI Recommendation Summary</span>
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400 italic">
+              <p className="text-xs text-stone-600 italic">
                 &ldquo;{product.explanation}&rdquo;
               </p>
               {dietFit.warnings.length > 0 && (
-                <div className="pt-2 text-[11px] text-amber-700 dark:text-amber-400 space-y-0.5">
+                <div className="pt-2 text-[11px] text-amber-800 space-y-0.5">
                   {dietFit.warnings.map((w, idx) => (
                     <div key={idx} className="flex items-center gap-1">
                       <AlertTriangle className="w-3 h-3 shrink-0" />
@@ -218,14 +218,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           {/* Product Tag Badges */}
           {tags.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500">
                 Extracted Quality Tags
               </h3>
               <div className="flex flex-wrap gap-2">
                 {tags.map((t) => (
                   <span
                     key={t.id}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-[#F5F5F7] text-stone-800 border border-black/[0.06]"
                   >
                     <span>{t.icon}</span>
                     <span>{t.label}</span>
@@ -237,25 +237,25 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
           {/* Yuka-Style Positive & Negative Signals */}
           <div className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500">
               Nutrition Signals Breakdown
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Positives */}
-              <div className="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 space-y-2.5">
-                <h4 className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+              <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/60 space-y-2.5">
+                <h4 className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
                   <span>🟢</span>
                   <span>Positive Signals ({positives.length})</span>
                 </h4>
                 {positives.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">No strong positive signals detected</p>
+                  <p className="text-xs text-stone-400 italic">No strong positive signals detected</p>
                 ) : (
                   <ul className="space-y-2 text-xs">
                     {positives.map((p, i) => (
-                      <li key={i} className="flex items-start justify-between text-slate-800 dark:text-slate-200">
+                      <li key={i} className="flex items-start justify-between text-stone-800">
                         <span className="font-semibold">{p.label}</span>
-                        <span className="text-slate-500 dark:text-slate-400 text-right">{p.detail}</span>
+                        <span className="text-stone-500 text-right">{p.detail}</span>
                       </li>
                     ))}
                   </ul>
@@ -263,19 +263,19 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               </div>
 
               {/* Negatives */}
-              <div className="p-4 rounded-2xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/40 space-y-2.5">
-                <h4 className="text-xs font-bold text-rose-800 dark:text-rose-300 flex items-center gap-1.5">
+              <div className="p-4 rounded-2xl bg-rose-50/70 border border-rose-200/60 space-y-2.5">
+                <h4 className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
                   <span>🔴</span>
                   <span>Things to Watch ({negatives.length})</span>
                 </h4>
                 {negatives.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">No major negative signals detected</p>
+                  <p className="text-xs text-stone-400 italic">No major negative signals detected</p>
                 ) : (
                   <ul className="space-y-2 text-xs">
                     {negatives.map((p, i) => (
-                      <li key={i} className="flex items-start justify-between text-slate-800 dark:text-slate-200">
+                      <li key={i} className="flex items-start justify-between text-stone-800">
                         <span className="font-semibold">{p.label}</span>
-                        <span className="text-slate-500 dark:text-slate-400 text-right">{p.detail}</span>
+                        <span className="text-stone-500 text-right">{p.detail}</span>
                       </li>
                     ))}
                   </ul>
@@ -287,48 +287,48 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           {/* Macro Nutrition Table (per 100g) */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500">
                 Nutritional Values (per 100g)
               </h3>
               {health.servingSize && (
-                <span className="text-xs text-slate-400">Serving size: {health.servingSize}</span>
+                <span className="text-xs text-stone-400">Serving size: {health.servingSize}</span>
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-              <div className="flex justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50">
-                <span className="text-slate-600 dark:text-slate-400">Energy</span>
-                <span className="font-medium text-slate-900 dark:text-white">
+            <div className="rounded-2xl border border-stone-200 overflow-hidden divide-y divide-stone-100 text-xs">
+              <div className="flex justify-between px-4 py-2.5 bg-stone-50">
+                <span className="text-stone-600">Energy</span>
+                <span className="font-medium text-stone-900">
                   {n.energyKcal100g !== undefined ? `${n.energyKcal100g} kcal` : "N/A"}
                 </span>
               </div>
               <div className="flex justify-between px-4 py-2.5">
-                <span className="text-slate-600 dark:text-slate-400">Protein</span>
-                <span className="font-medium text-slate-900 dark:text-white">
+                <span className="text-stone-600">Protein</span>
+                <span className="font-medium text-stone-900">
                   {n.protein100g !== undefined ? `${n.protein100g} g` : "N/A"}
                 </span>
               </div>
-              <div className="flex justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50">
-                <span className="text-slate-600 dark:text-slate-400">Sugars</span>
-                <span className="font-medium text-slate-900 dark:text-white">
+              <div className="flex justify-between px-4 py-2.5 bg-stone-50">
+                <span className="text-stone-600">Sugars</span>
+                <span className="font-medium text-stone-900">
                   {n.sugars100g !== undefined ? `${n.sugars100g} g` : "N/A"}
                 </span>
               </div>
               <div className="flex justify-between px-4 py-2.5">
-                <span className="text-slate-600 dark:text-slate-400">Saturated Fat</span>
-                <span className="font-medium text-slate-900 dark:text-white">
+                <span className="text-stone-600">Saturated Fat</span>
+                <span className="font-medium text-stone-900">
                   {n.saturatedFat100g !== undefined ? `${n.saturatedFat100g} g` : "N/A"}
                 </span>
               </div>
-              <div className="flex justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50">
-                <span className="text-slate-600 dark:text-slate-400">Fiber</span>
-                <span className="font-medium text-slate-900 dark:text-white">
+              <div className="flex justify-between px-4 py-2.5 bg-stone-50">
+                <span className="text-stone-600">Fiber</span>
+                <span className="font-medium text-stone-900">
                   {n.fiber100g !== undefined ? `${n.fiber100g} g` : "N/A"}
                 </span>
               </div>
               <div className="flex justify-between px-4 py-2.5">
-                <span className="text-slate-600 dark:text-slate-400">Sodium</span>
-                <span className="font-medium text-slate-900 dark:text-white">
+                <span className="text-stone-600">Sodium</span>
+                <span className="font-medium text-stone-900">
                   {n.sodium100g !== undefined ? `${n.sodium100g} g` : "N/A"}
                 </span>
               </div>
@@ -338,10 +338,10 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           {/* Ingredients Text */}
           {health.ingredientsText && (
             <div className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500">
                 Ingredients List
               </h3>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed p-4 bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl">
+              <p className="text-xs text-stone-700 leading-relaxed p-4 bg-stone-50 border border-stone-200 rounded-2xl">
                 {health.ingredientsText}
               </p>
             </div>
@@ -349,13 +349,13 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="sticky bottom-0 z-10 flex items-center gap-3 p-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-100 dark:border-slate-800">
+        <div className="sticky bottom-0 z-10 flex items-center gap-3 p-4 bg-white/90 backdrop-blur-md border-t border-stone-100">
           <button
             onClick={() => onToggleBought(product.providerProductId)}
             className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold transition-all ${
               isBought
-                ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
-                : "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200"
+                ? "bg-[#34C759]/15 text-[#248A3D] border border-[#34C759]/30"
+                : "bg-[#34C759] text-white hover:bg-[#248A3D] shadow-md shadow-[#34C759]/20"
             }`}
           >
             {isBought ? (
@@ -365,7 +365,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               </>
             ) : (
               <>
-                <Heart className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <Heart className="w-4 h-4" />
                 <span>Mark as Bought</span>
               </>
             )}
@@ -376,7 +376,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               href={product.productUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 py-3 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-md shadow-emerald-600/20 transition-all"
+              className="flex items-center gap-2 py-3 px-5 rounded-xl bg-[#1D1D1F] hover:bg-black text-white text-sm font-semibold shadow-md transition-all"
             >
               <span>View Store</span>
               <ExternalLink className="w-4 h-4" />

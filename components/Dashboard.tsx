@@ -289,20 +289,20 @@ export default function Dashboard() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-10 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-10 bg-[#FBFBFD] text-[#1D1D1F]">
       <div className="mx-auto max-w-7xl">
 
         {/* ── Apple-inspired Glass Header ── */}
-        <header className="sticky top-0 z-40 relative flex flex-col gap-4 overflow-hidden rounded-[2rem] border border-black/[0.06] dark:border-white/10 apple-glass p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+        <header className="sticky top-0 z-40 relative flex flex-col gap-4 overflow-hidden rounded-[2rem] border border-black/[0.05] apple-glass p-4 shadow-sm md:flex-row md:items-center md:justify-between">
           <div className="relative flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-700 text-white shadow-md shadow-emerald-700/20">
+            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#166534] text-white shadow-md shadow-[#166534]/20">
               <BroccoliBiteLogo className="h-7 w-7 text-white" />
             </div>
             <div>
-              <p className="flex items-center gap-1.5 text-xs font-bold tracking-tight text-emerald-700 dark:text-emerald-400">
+              <p className="flex items-center gap-1.5 text-xs font-bold tracking-tight text-[#166534]">
                 The Good Bite
               </p>
-              <h1 className="font-heading text-xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-2xl">
+              <h1 className="font-heading text-xl font-bold tracking-tight text-[#1D1D1F] sm:text-2xl">
                 Healthy picks, honest prices.
               </h1>
             </div>
@@ -314,10 +314,10 @@ export default function Dashboard() {
             <button
               onClick={() => setQuickMode(!quickMode)}
               className={cn(
-                "flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold transition-all border",
+                "flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold transition-all border",
                 quickMode
-                  ? "bg-emerald-600 text-white border-emerald-500 shadow-sm"
-                  : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100"
+                  ? "bg-[#166534] text-white border-[#166534] shadow-sm"
+                  : "bg-[#F5F5F7] text-[#1D1D1F] border-black/[0.06] hover:bg-black hover:text-white"
               )}
             >
               <Zap className="h-3.5 w-3.5" />
@@ -326,15 +326,15 @@ export default function Dashboard() {
 
             {signedIn ? (
               <>
-                <span className="flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-black/[0.04]">
+                <span className="flex items-center gap-1.5 rounded-full bg-[#F5F5F7] px-3.5 py-2 text-xs font-semibold text-[#1D1D1F] border border-black/[0.04]">
                   {demoMode ? (
-                    <><Sparkles className="h-3.5 w-3.5 text-emerald-500" /> Free Tier</>
+                    <><Sparkles className="h-3.5 w-3.5 text-[#34C759]" /> Free Tier</>
                   ) : (
-                    <><Check className="h-3.5 w-3.5 text-emerald-500" /> {session?.user.email}</>
+                    <><Check className="h-3.5 w-3.5 text-[#34C759]" /> {session?.user.email}</>
                   )}
                 </span>
                 <button
-                  className="flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition hover:bg-black hover:text-white"
+                  className="flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-[#F5F5F7] px-3.5 py-2 text-xs font-semibold text-[#1D1D1F] transition hover:bg-black hover:text-white"
                   onClick={signOut}
                   id="sign-out-btn"
                 >
@@ -376,7 +376,7 @@ export default function Dashboard() {
 
         {/* ── Allergy Mandatory Disclaimer Banner (if any allergy selected) ── */}
         {allergies.length > 0 && (
-          <div className="mt-4 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex items-start gap-3 text-amber-900 dark:text-amber-200 text-xs">
+          <div className="mt-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3 text-amber-900 text-xs">
             <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div>
               <span className="font-bold">⚠️ Allergy Safety Disclaimer: </span>
@@ -393,14 +393,14 @@ export default function Dashboard() {
           <aside className="h-fit space-y-4">
 
             {/* Location / ZIP Code Card */}
-            <div className="rounded-[2rem] border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 p-4 shadow-sm backdrop-blur-sm">
+            <div className="rounded-[2rem] border border-stone-200/80 bg-white p-4 shadow-sm shadow-stone-900/5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100">Store ZIP Code (Optional)</span>
+                  <MapPin className="w-4 h-4 text-[#166534]" />
+                  <span className="text-xs font-bold text-[#1D1D1F]">Store ZIP Code (Optional)</span>
                 </div>
                 {zipCode.length === 5 && (
-                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                  <span className="text-[10px] font-bold text-[#166534] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                     📍 {zipCode}
                   </span>
                 )}
@@ -412,22 +412,22 @@ export default function Dashboard() {
                   value={zipCode}
                   onChange={(e) => handleZipChange(e.target.value.replace(/\D/g, ""))}
                   placeholder="e.g. 10001 (USA)"
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-emerald-500"
+                  className="w-full rounded-xl border border-stone-200 bg-[#F5F5F7] px-3 py-2 text-xs font-semibold text-[#1D1D1F] placeholder:text-stone-400 outline-none focus:border-[#166534]"
                 />
               </div>
             </div>
 
             {/* List Editor Card (or Quick Mode indicator) */}
             {!quickMode ? (
-              <div className="rounded-[2rem] border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 p-5 shadow-sm backdrop-blur-sm">
+              <div className="rounded-[2rem] border border-stone-200/80 bg-white p-5 shadow-sm shadow-stone-900/5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-xl font-black text-slate-950 dark:text-white">Grocery list</h2>
-                    <p className="mt-0.5 text-xs font-medium text-slate-500">
+                    <h2 className="text-xl font-black text-stone-950">Grocery list</h2>
+                    <p className="mt-0.5 text-xs font-medium text-stone-500">
                       Add items one by one, or paste a list.
                     </p>
                   </div>
-                  <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs font-black text-slate-700 dark:text-slate-300">
+                  <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-700">
                     {items.length} item{items.length !== 1 ? "s" : ""}
                   </span>
                 </div>
@@ -441,11 +441,11 @@ export default function Dashboard() {
                       if (event.key === "Enter") addItems(itemInput);
                     }}
                     placeholder="e.g. mac and cheese, chips…"
-                    className="min-w-0 flex-1 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    className="min-w-0 flex-1 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-semibold text-stone-900 placeholder:text-stone-400 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                   />
                   <button
                     id="add-item-btn"
-                    className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/30 transition active:scale-95"
+                    className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-300/40 transition hover:from-emerald-600 hover:to-emerald-800 active:scale-95"
                     onClick={() => addItems(itemInput)}
                     aria-label="Add grocery item"
                   >
@@ -455,35 +455,35 @@ export default function Dashboard() {
 
                 <div className="mt-3 space-y-1.5">
                   {items.length === 0 && (
-                    <p className="rounded-2xl bg-slate-50 dark:bg-slate-800 px-4 py-3 text-center text-xs font-semibold text-slate-400">
+                    <p className="rounded-2xl bg-stone-50 px-4 py-3 text-center text-xs font-semibold text-stone-400">
                       Add your first grocery item above
                     </p>
                   )}
                   {items.map((item, index) => (
                     <div
                       key={`${item}-${index}`}
-                      className="group flex items-center gap-1.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-2 transition hover:bg-emerald-50/50"
+                      className="group flex items-center gap-1.5 rounded-2xl bg-stone-50 p-2 transition hover:bg-emerald-50/50"
                     >
-                      <span className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-700 text-xs font-black text-slate-600 dark:text-slate-300">
+                      <span className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-200 text-xs font-black text-stone-600">
                         {index + 1}
                       </span>
-                      <span className="flex-1 truncate px-1 text-sm font-bold capitalize text-slate-800 dark:text-slate-200">{item}</span>
+                      <span className="flex-1 truncate px-1 text-sm font-bold capitalize text-stone-800">{item}</span>
                       <button
-                        className="rounded-full p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700"
+                        className="rounded-full p-1.5 text-stone-400 transition hover:bg-white hover:text-stone-700"
                         onClick={() => moveItem(index, -1)}
                         aria-label="Move up"
                       >
                         <ChevronLeft className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        className="rounded-full p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700"
+                        className="rounded-full p-1.5 text-stone-400 transition hover:bg-white hover:text-stone-700"
                         onClick={() => moveItem(index, 1)}
                         aria-label="Move down"
                       >
                         <ChevronRight className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        className="rounded-full p-1.5 text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                        className="rounded-full p-1.5 text-stone-300 transition hover:bg-red-50 hover:text-red-500"
                         onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
                         aria-label="Remove item"
                       >
@@ -497,7 +497,7 @@ export default function Dashboard() {
                 <div className="mt-5 grid gap-2">
                   <button
                     id="search-btn"
-                    className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 px-4 py-3.5 font-black text-white shadow-md transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-stone-900 to-stone-800 px-4 py-3.5 font-black text-white shadow-md transition hover:from-stone-800 hover:to-stone-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => searchProducts()}
                     disabled={isSearching || !signedIn || items.length === 0}
                   >
@@ -510,7 +510,7 @@ export default function Dashboard() {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       id="save-list-btn"
-                      className="flex items-center justify-center gap-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm font-bold text-slate-700 dark:text-slate-200 transition hover:bg-slate-50"
+                      className="flex items-center justify-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-bold text-stone-700 transition hover:bg-stone-50 hover:border-stone-300"
                       onClick={saveCurrentList}
                       disabled={!signedIn}
                     >
@@ -518,7 +518,7 @@ export default function Dashboard() {
                     </button>
                     <button
                       id="saved-lists-btn"
-                      className="flex items-center justify-center gap-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm font-bold text-slate-700 dark:text-slate-200 transition hover:bg-slate-50"
+                      className="flex items-center justify-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-bold text-stone-700 transition hover:bg-stone-50 hover:border-stone-300"
                       onClick={loadLists}
                       disabled={!signedIn}
                     >
@@ -528,22 +528,22 @@ export default function Dashboard() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-[2rem] border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 p-5 shadow-sm">
-                <h3 className="font-bold text-emerald-900 dark:text-emerald-300 text-sm flex items-center gap-1.5">
+              <div className="rounded-[2rem] border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+                <h3 className="font-bold text-emerald-900 text-sm flex items-center gap-1.5">
                   <Zap className="w-4 h-4 text-emerald-600" />
                   <span>Quick Lookup Mode Active</span>
                 </h3>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                <p className="text-xs text-stone-600 mt-1">
                   Type any food item in the single search bar on the right for instant ranking.
                 </p>
               </div>
             )}
 
             {/* Allergen Filters Card */}
-            <div className="rounded-[2rem] border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 p-5 shadow-sm backdrop-blur-sm">
+            <div className="rounded-[2rem] border border-stone-200/80 bg-white p-5 shadow-sm shadow-stone-900/5">
               <div className="mb-3">
-                <h3 className="font-black text-slate-950 dark:text-white text-sm">Allergy Filters</h3>
-                <p className="text-xs font-medium text-slate-500 mt-0.5">Penalizes products containing selected allergens.</p>
+                <h3 className="font-black text-stone-950 text-sm">Allergy Filters</h3>
+                <p className="text-xs font-medium text-stone-500 mt-0.5">Penalizes products containing selected allergens.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {ALLERGENS.map((allergen) => {
@@ -557,7 +557,7 @@ export default function Dashboard() {
                         "flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border transition",
                         active
                           ? "bg-rose-600 text-white border-rose-600 shadow-sm"
-                          : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
+                          : "bg-white text-stone-700 border-stone-200 hover:bg-stone-50"
                       )}
                     >
                       <span>{info.icon}</span>
@@ -569,10 +569,10 @@ export default function Dashboard() {
             </div>
 
             {/* Diet Mode Card */}
-            <div className="rounded-[2rem] border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 p-5 shadow-sm backdrop-blur-sm">
+            <div className="rounded-[2rem] border border-stone-200/80 bg-white p-5 shadow-sm shadow-stone-900/5">
               <div className="mb-3">
-                <h3 className="font-black text-slate-950 dark:text-white text-sm">Diet Modes & Packs</h3>
-                <p className="text-xs font-medium text-slate-500 mt-0.5">Filter by nutritional goals or diets.</p>
+                <h3 className="font-black text-stone-950 text-sm">Diet Modes & Packs</h3>
+                <p className="text-xs font-medium text-stone-500 mt-0.5">Filter by nutritional goals or diets.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {DIET_MODES.map((mode) => (
@@ -583,8 +583,8 @@ export default function Dashboard() {
                     className={cn(
                       "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition",
                       dietModes.includes(mode)
-                        ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
-                        : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300 hover:bg-slate-50"
+                        ? "border-[#166534] bg-[#166534] text-white shadow-sm"
+                        : "border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50"
                     )}
                   >
                     <span>{DIET_ICONS[mode]}</span>
@@ -600,7 +600,7 @@ export default function Dashboard() {
           <section className="min-w-0 space-y-5">
             {/* Single Quick Lookup Search Bar when in Quick Mode */}
             {quickMode && (
-              <div className="rounded-[2rem] border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-900 p-4 shadow-md">
+              <div className="rounded-[2rem] border border-stone-200 bg-white p-4 shadow-md">
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -609,19 +609,19 @@ export default function Dashboard() {
                   className="flex gap-2"
                 >
                   <div className="relative flex-1">
-                    <Search className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
+                    <Search className="absolute left-4 top-3.5 h-5 w-5 text-stone-400" />
                     <input
                       type="text"
                       value={quickQuery}
                       onChange={(e) => setQuickQuery(e.target.value)}
                       placeholder="Quick search any grocery product (e.g. 'almond milk', 'greek yogurt')..."
-                      className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-11 pr-4 py-3 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-emerald-500"
+                      className="w-full rounded-2xl border border-stone-200 bg-[#F5F5F7] pl-11 pr-4 py-3 text-sm font-semibold text-stone-900 placeholder:text-stone-400 outline-none focus:border-[#166534]"
                     />
                   </div>
                   <button
                     type="submit"
                     disabled={isSearching || !quickQuery.trim()}
-                    className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition disabled:opacity-50"
+                    className="px-6 py-3 rounded-2xl bg-[#166534] hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition disabled:opacity-50"
                   >
                     {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : "Search"}
                   </button>
@@ -650,7 +650,7 @@ export default function Dashboard() {
 
             {/* Disclaimer */}
             {results.length > 0 && (
-              <p className="px-2 text-xs font-medium text-slate-400">
+              <p className="px-2 text-xs font-medium text-stone-400">
                 Prices are estimates from shopping results, not confirmed local shelf prices.
                 Open Food Facts data may have gaps; nutrition signals are informational only.
               </p>
@@ -672,17 +672,17 @@ export default function Dashboard() {
         {/* ── Saved lists drawer ── */}
         {showLists && (
           <div
-            className="fixed inset-0 z-50 bg-slate-950/40 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-50 bg-stone-950/40 p-4 backdrop-blur-sm"
             onClick={() => setShowLists(false)}
           >
             <div
-              className="ml-auto h-full max-w-sm overflow-auto rounded-[2rem] bg-white dark:bg-slate-900 p-5 shadow-2xl"
+              className="ml-auto h-full max-w-sm overflow-auto rounded-[2rem] bg-white p-5 shadow-2xl"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black text-slate-900 dark:text-white">Saved lists</h2>
+                <h2 className="text-xl font-black text-stone-900">Saved lists</h2>
                 <button
-                  className="rounded-full bg-slate-100 dark:bg-slate-800 p-2 text-slate-600 dark:text-slate-300 transition hover:bg-slate-200"
+                  className="rounded-full bg-stone-100 p-2 text-stone-600 transition hover:bg-stone-200"
                   onClick={() => setShowLists(false)}
                   aria-label="Close saved lists"
                 >
@@ -691,14 +691,14 @@ export default function Dashboard() {
               </div>
               <div className="mt-4 space-y-2">
                 {lists.length === 0 ? (
-                  <p className="rounded-2xl bg-slate-50 dark:bg-slate-800 p-4 text-center text-sm font-semibold text-slate-400">
+                  <p className="rounded-2xl bg-stone-50 p-4 text-center text-sm font-semibold text-stone-400">
                     No saved lists yet. Save your first list!
                   </p>
                 ) : (
                   lists.map((list) => (
                     <button
                       key={list.id}
-                      className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50/50"
+                      className="w-full rounded-2xl border border-stone-200 bg-stone-50 p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50/50"
                       onClick={() => {
                         const nextItems =
                           list.grocery_list_items
@@ -710,8 +710,8 @@ export default function Dashboard() {
                         notify(`Loaded list: ${list.name}`, "success");
                       }}
                     >
-                      <div className="font-black text-slate-900 dark:text-white">{list.name}</div>
-                      <div className="mt-1 text-xs font-semibold text-slate-500">
+                      <div className="font-black text-stone-900">{list.name}</div>
+                      <div className="mt-1 text-xs font-semibold text-stone-500">
                         {list.grocery_list_items?.length ?? 0} item{(list.grocery_list_items?.length ?? 0) !== 1 ? "s" : ""}
                       </div>
                     </button>
@@ -737,14 +737,14 @@ function AuthControls(props: {
   setShowMagicLink: (v: boolean) => void;
 }) {
   if (!props.supabase) {
-    return <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-3.5 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-200">Demo active</span>;
+    return <span className="rounded-full bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 ring-1 ring-emerald-200">Demo active</span>;
   }
 
   return (
     <div className="flex flex-col gap-2 sm:flex-row">
       <button
         id="google-sign-in-btn"
-        className="flex items-center gap-2 rounded-full bg-slate-950 dark:bg-white px-4 py-2 text-xs font-black text-white dark:text-slate-950 transition hover:bg-slate-800"
+        className="flex items-center gap-2 rounded-full bg-[#1D1D1F] px-4 py-2 text-xs font-black text-white transition hover:bg-black"
         onClick={props.signInWithGoogle}
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24">
@@ -756,7 +756,7 @@ function AuthControls(props: {
         Sign in with Google
       </button>
       <button
-        className="flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-700 px-3.5 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 transition hover:bg-slate-50"
+        className="flex items-center gap-1.5 rounded-full border border-stone-200 px-3.5 py-2 text-xs font-bold text-stone-600 transition hover:bg-stone-50"
         onClick={() => props.setShowMagicLink(!props.showMagicLink)}
       >
         Email link
@@ -770,11 +770,11 @@ function AuthControls(props: {
             onKeyDown={(e) => { if (e.key === "Enter") props.sendMagicLink(); }}
             placeholder="you@example.com"
             type="email"
-            className="w-44 rounded-full border border-slate-200 px-3.5 py-2 text-xs font-semibold outline-none focus:border-emerald-500"
+            className="w-44 rounded-full border border-stone-200 px-3.5 py-2 text-xs font-semibold outline-none focus:border-emerald-500"
           />
           <button
             id="send-magic-link-btn"
-            className="rounded-full bg-slate-100 px-3.5 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-200"
+            className="rounded-full bg-stone-100 px-3.5 py-2 text-xs font-black text-stone-700 transition hover:bg-stone-200"
             onClick={props.sendMagicLink}
           >
             Send
@@ -796,13 +796,13 @@ function SignInPrompt(props: {
   sendMagicLink: () => void;
 }) {
   return (
-    <div className="grid min-h-[32rem] place-items-center rounded-[2rem] border border-emerald-100 dark:border-emerald-900 bg-gradient-to-br from-white to-emerald-50/60 dark:from-slate-900 dark:to-slate-950 p-8 text-center shadow-sm backdrop-blur-sm">
+    <div className="grid min-h-[32rem] place-items-center rounded-[2rem] border border-emerald-100 bg-gradient-to-br from-white to-emerald-50/60 p-8 text-center shadow-sm backdrop-blur-sm">
       <div className="max-w-md">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-600 text-white shadow-xl shadow-emerald-600/30">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-[#166534] text-white shadow-xl shadow-[#166534]/30">
           <ShoppingBasket className="h-10 w-10" />
         </div>
-        <h2 className="mt-6 text-3xl font-black text-slate-950 dark:text-white">Make healthier grocery choices</h2>
-        <p className="mx-auto mt-3 max-w-sm font-semibold text-slate-500 dark:text-slate-400">
+        <h2 className="mt-6 text-3xl font-black text-stone-950">Make healthier grocery choices</h2>
+        <p className="mx-auto mt-3 max-w-sm font-semibold text-stone-500">
           Enter your grocery list to get ranked healthy product options with estimated prices, diet fit, and Yuka-style nutrition signals.
         </p>
         <div className="mt-8 flex flex-col items-center gap-3">
@@ -810,7 +810,7 @@ function SignInPrompt(props: {
             <>
               <button
                 id="hero-google-sign-in-btn"
-                className="flex w-full max-w-xs items-center justify-center gap-2.5 rounded-2xl bg-slate-950 dark:bg-white px-6 py-3.5 font-black text-white dark:text-slate-950 shadow-md transition hover:bg-slate-800 active:scale-[0.98]"
+                className="flex w-full max-w-xs items-center justify-center gap-2.5 rounded-2xl bg-stone-950 px-6 py-3.5 font-black text-white shadow-md transition hover:bg-stone-800 active:scale-[0.98]"
                 onClick={props.signInWithGoogle}
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -822,7 +822,7 @@ function SignInPrompt(props: {
                 Continue with Google
               </button>
               <button
-                className="text-xs font-semibold text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline"
+                className="text-xs font-semibold text-stone-500 underline-offset-2 hover:text-stone-700 hover:underline"
                 onClick={() => props.setShowMagicLink(!props.showMagicLink)}
               >
                 Sign in with email link instead
@@ -835,10 +835,10 @@ function SignInPrompt(props: {
                     onKeyDown={(e) => { if (e.key === "Enter") props.sendMagicLink(); }}
                     placeholder="you@example.com"
                     type="email"
-                    className="min-w-0 flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-xs font-semibold outline-none focus:border-emerald-500"
+                    className="min-w-0 flex-1 rounded-2xl border border-stone-200 px-4 py-3 text-xs font-semibold outline-none focus:border-emerald-500"
                   />
                   <button
-                    className="rounded-2xl bg-slate-100 px-4 py-3 text-xs font-black text-slate-700 hover:bg-slate-200"
+                    className="rounded-2xl bg-stone-100 px-4 py-3 text-xs font-black text-stone-700 hover:bg-stone-200"
                     onClick={props.sendMagicLink}
                   >
                     Send
@@ -847,18 +847,18 @@ function SignInPrompt(props: {
               )}
             </>
           ) : (
-            <p className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 px-4 py-3 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+            <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-800">
               Demo mode active — Search is fully available.
             </p>
           )}
         </div>
-        <div className="mt-8 grid grid-cols-3 gap-4 border-t border-slate-100 dark:border-slate-800 pt-6 text-center">
+        <div className="mt-8 grid grid-cols-3 gap-4 border-t border-stone-100 pt-6 text-center">
           {[
             { icon: "🥗", label: "Nutrition scores" },
             { icon: "💰", label: "Price per serving" },
             { icon: "🌾", label: "FODMAP & Allergies" }
           ].map((f) => (
-            <div key={f.label} className="text-xs font-semibold text-slate-500">
+            <div key={f.label} className="text-xs font-semibold text-stone-500">
               <div className="mb-1 text-2xl">{f.icon}</div>
               {f.label}
             </div>
@@ -872,19 +872,19 @@ function SignInPrompt(props: {
 /* ── Empty state ── */
 function EmptyState({ isSearching, itemCount }: { isSearching: boolean; itemCount: number }) {
   return (
-    <div className="grid min-h-[32rem] place-items-center rounded-[2rem] border border-dashed border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 p-8 text-center backdrop-blur-sm">
+    <div className="grid min-h-[32rem] place-items-center rounded-[2rem] border border-dashed border-stone-200 bg-white/60 p-8 text-center backdrop-blur-sm">
       <div>
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 text-slate-400">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-stone-100 to-stone-200 text-stone-400">
           {isSearching ? (
             <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
           ) : (
             <Sparkles className="h-10 w-10 text-emerald-500" />
           )}
         </div>
-        <h2 className="mt-5 text-2xl font-black text-slate-800 dark:text-white">
+        <h2 className="mt-5 text-2xl font-black text-stone-800">
           {isSearching ? "Finding healthy picks…" : "Ready to search"}
         </h2>
-        <p className="mx-auto mt-2 max-w-sm font-semibold text-slate-400">
+        <p className="mx-auto mt-2 max-w-sm font-semibold text-stone-400">
           {isSearching
             ? "Fetching products and computing nutrition, price, and diet scores."
             : itemCount === 0
@@ -913,14 +913,14 @@ function ProductCarousel({
   onSelectProduct: (product: RankedProduct) => void;
 }) {
   return (
-    <section className="rounded-[2rem] border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 p-5 shadow-sm backdrop-blur-sm">
+    <section className="rounded-[2rem] border border-stone-200/80 bg-white p-5 shadow-sm shadow-stone-900/5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+          <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-[#166534]">
             <Search className="h-3 w-3" /> Grocery item
           </p>
-          <h2 className="text-2xl font-black capitalize text-slate-950 dark:text-white">{item.query}</h2>
-          <p className="mt-0.5 text-xs font-semibold text-slate-400">{item.options.length} option{item.options.length !== 1 ? "s" : ""} ranked</p>
+          <h2 className="text-2xl font-black capitalize text-stone-950">{item.query}</h2>
+          <p className="mt-0.5 text-xs font-semibold text-stone-400">{item.options.length} option{item.options.length !== 1 ? "s" : ""} ranked</p>
         </div>
         {item.error && (
           <span className="rounded-full bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-200">
@@ -931,7 +931,7 @@ function ProductCarousel({
 
       <div className="no-scrollbar mt-4 flex gap-4 overflow-x-auto pb-3">
         {item.options.length === 0 && !item.error && (
-          <p className="rounded-2xl bg-slate-50 dark:bg-slate-800 px-6 py-8 text-sm font-semibold text-slate-400">
+          <p className="rounded-2xl bg-stone-50 px-6 py-8 text-sm font-semibold text-stone-400">
             No results found for this item.
           </p>
         )}
@@ -983,11 +983,11 @@ function ProductCard({
   return (
     <article
       onClick={onSelect}
-      className="w-[270px] cursor-pointer flex-shrink-0 bg-slate-100 dark:bg-slate-850 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-4 flex flex-col justify-between transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg group"
+      className="w-[270px] cursor-pointer flex-shrink-0 bg-[#F5F5F7] border border-black/[0.05] rounded-3xl p-4 flex flex-col justify-between transition-all duration-200 hover:-translate-y-1 hover:shadow-md group"
     >
       <div>
         {/* Aspect ratio 1:1 image container on white background */}
-        <div className="relative bg-white dark:bg-slate-900 rounded-2xl p-2 mb-3 shadow-sm aspect-square flex items-center justify-center overflow-hidden">
+        <div className="relative bg-white rounded-2xl p-2 mb-3 shadow-sm aspect-square flex items-center justify-center overflow-hidden">
           {product.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -1001,40 +1001,40 @@ function ProductCard({
           )}
 
           {/* Health Score Pill */}
-          <div className="absolute right-2 top-2 bg-emerald-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-md flex items-center gap-1">
+          <div className="absolute right-2 top-2 bg-[#34C759] text-white text-xs font-bold font-num px-2.5 py-1 rounded-full shadow-sm flex items-center gap-1">
             <span>{product.overallScore}</span>
             <span className="text-[10px] opacity-80">/100</span>
           </div>
 
           {alreadyBought && (
-            <div className="absolute left-2 top-2 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
+            <div className="absolute left-2 top-2 bg-[#34C759] text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
               <Check className="h-3 w-3" /> Bought
             </div>
           )}
 
           {matchedAllergens.length > 0 && (
-            <div className="absolute left-2 bottom-2 bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
+            <div className="absolute left-2 bottom-2 bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
               <ShieldAlert className="h-3 w-3" /> Allergen
             </div>
           )}
         </div>
 
         {/* Title and seller */}
-        <p className="line-clamp-2 min-h-10 text-xs font-bold text-slate-900 dark:text-white leading-snug group-hover:text-emerald-600 transition-colors">
+        <p className="line-clamp-2 min-h-10 text-xs font-bold text-[#1D1D1F] leading-snug group-hover:text-[#166534] transition-colors">
           {product.title}
         </p>
-        <p className="mt-0.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
+        <p className="mt-0.5 text-[11px] font-medium text-[#86868B] truncate">
           {product.seller ?? product.brand ?? "Grocery item"}
         </p>
 
         {/* Price & Price per serving */}
         <div className="mt-2.5 flex items-baseline justify-between gap-1">
           <div>
-            <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+            <span className="font-num text-sm font-extrabold text-[#1D1D1F]">
               {product.estimatedPrice === null ? "Est. ?" : `$${product.estimatedPrice.toFixed(2)}`}
             </span>
             {priceServing && (
-              <span className="ml-1.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+              <span className="ml-1.5 text-[10px] font-semibold text-[#166534]">
                 ({priceServing.formatted})
               </span>
             )}
@@ -1051,7 +1051,7 @@ function ProductCard({
             {tags.map((t) => (
               <span
                 key={t.id}
-                className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-semibold px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-1"
+                className="bg-white text-slate-700 text-[10px] font-semibold px-2 py-0.5 rounded-md border border-black/[0.06] flex items-center gap-1"
               >
                 <span>{t.icon}</span>
                 <span>{t.label}</span>
@@ -1066,16 +1066,16 @@ function ProductCard({
             {product.dietFit.matchedModes.map((mode) => (
               <span
                 key={mode}
-                className="bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1"
+                className="bg-emerald-50 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1"
               >
-                <Star className="h-2.5 w-2.5 text-emerald-600 fill-emerald-600" /> {DIET_LABELS[mode]}
+                <Star className="h-2.5 w-2.5 text-[#166534] fill-[#166534]" /> {DIET_LABELS[mode]}
               </span>
             ))}
           </div>
         )}
 
         {/* Explanation */}
-        <p className="mt-2 text-[11px] font-medium leading-relaxed text-slate-500 dark:text-slate-400 line-clamp-2">
+        <p className="mt-2 text-[11px] font-medium leading-relaxed text-[#86868B] line-clamp-2">
           {product.explanation}
         </p>
       </div>
@@ -1087,8 +1087,8 @@ function ProductCard({
           className={cn(
             "flex-1 rounded-2xl py-2.5 text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
             alreadyBought
-              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300"
-              : "bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95 shadow-sm"
+              ? "bg-[#34C759]/15 text-[#248A3D] border border-[#34C759]/30"
+              : "bg-[#34C759] text-white hover:bg-[#248A3D] active:scale-95 shadow-sm"
           )}
           onClick={() => onBought(query, product)}
         >
@@ -1104,7 +1104,7 @@ function ProductCard({
             href={product.productUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-2.5 text-slate-500 hover:text-slate-900 transition"
+            className="flex items-center justify-center rounded-2xl border border-black/[0.08] bg-white px-2.5 py-2.5 text-[#86868B] hover:text-[#1D1D1F] transition"
             aria-label="View product website"
           >
             <ExternalLink className="h-3.5 w-3.5" />
@@ -1123,7 +1123,7 @@ function NutriBadge({ score }: { score: string }) {
     c: "bg-yellow-400 text-yellow-950",
     d: "bg-orange-500 text-white",
     e: "bg-red-600 text-white",
-    unknown: "bg-slate-200 text-slate-500"
+    unknown: "bg-stone-200 text-stone-500"
   };
   return (
     <span className={cn("grid h-6 w-6 place-items-center rounded-lg text-[10px] font-black", colors[score] ?? colors.unknown)}>
