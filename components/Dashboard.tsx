@@ -100,7 +100,7 @@ export default function Dashboard() {
   const [email, setEmail] = useState("");
   const [bought, setBought] = useState<string[]>([]);
   const [checked, setChecked] = useState<string[]>([]);
-  const [editing, setEditing] = useState(false);
+  const removedQueries = useRef(new Set<string>());
   const requestRef = useRef<AbortController | null>(null);
   const accessToken =
     session?.access_token ??
@@ -246,7 +246,7 @@ export default function Dashboard() {
     );
   }
   function moveItem(from: number, to: number) {
-    if (searching || to < 0 || to >= items.length || from === to) return;
+    if (to < 0 || to >= items.length || from === to) return;
     setItems((current) => {
       const next = [...current];
       const [item] = next.splice(from, 1);
@@ -309,6 +309,7 @@ export default function Dashboard() {
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
+    removedQueries.current.clear();
     setPendingQueries(queries.map(normalizeQuery));
     setResults((current) => [
       ...(incremental
@@ -343,6 +344,7 @@ export default function Dashboard() {
         if (event.type === "meta") setMessage(event.disclaimer);
         if (event.type === "item") {
           const key = normalizeQuery(event.item.query);
+          if (removedQueries.current.has(key)) return;
           setResults((current) =>
             current.map((row) =>
               normalizeQuery(row.query) === key ? event.item : row,
@@ -571,7 +573,7 @@ export default function Dashboard() {
                 <p>
                   {quickMode
                     ? "Look up one item. Explore your options."
-                    : `${items.length} items · Better picks for your everyday shop`}
+                    : `${items.length} ${items.length === 1 ? "item" : "items"} · Better picks for your everyday shop`}
                 </p>
               </div>
               {!quickMode && (
@@ -642,14 +644,6 @@ export default function Dashboard() {
                   {!quickMode && (
                     <>
                       <button
-                        className="text-button"
-                        aria-pressed={editing}
-                        disabled={searching}
-                        onClick={() => setEditing(!editing)}
-                      >
-                        {editing ? "Done editing" : "Edit list"}
-                      </button>
-                      <button
                         className="primary-button"
                         disabled={searching || !items.length}
                         onClick={() => void searchProducts()}
@@ -702,14 +696,17 @@ export default function Dashboard() {
                   <article
                     className={`grocery-row ${selection && normalizeQuery(selection.query) === key ? "selected" : ""} ${complete ? "completed" : ""}`}
                     key={key}
-                    onDragOver={editing ? (e) => e.preventDefault() : undefined}
+                    onDragOver={
+                      !quickMode ? (e) => e.preventDefault() : undefined
+                    }
                     onDrop={
-                      editing
+                      !quickMode
                         ? (e) => {
                             e.preventDefault();
-                            const from = Number(
-                              e.dataTransfer.getData("text/meezany-index"),
-                            );
+                            const payload =
+                              e.dataTransfer.getData("text/meezany-index");
+                            if (!payload) return;
+                            const from = Number(payload);
                             if (
                               Number.isInteger(from) &&
                               from >= 0 &&
@@ -827,7 +824,7 @@ export default function Dashboard() {
                     {result?.warnings?.length ? (
                       <p className="row-warning">{result.warnings.join(" ")}</p>
                     ) : null}
-                    {editing && !quickMode && (
+                    {!quickMode && (
                       <div className="row-edit">
                         <span
                           draggable
@@ -861,6 +858,10 @@ export default function Dashboard() {
                           className="icon-button"
                           aria-label={`Remove ${query}`}
                           onClick={() => {
+                            removedQueries.current.add(key);
+                            setPendingQueries((current) =>
+                              current.filter((q) => q !== key),
+                            );
                             setItems(items.filter((q) => q !== query));
                             setResults(
                               results.filter(
