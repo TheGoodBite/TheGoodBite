@@ -56,12 +56,13 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     health.nutriScore === "unknown";
 
   // Score styling
-  const scoreColor =
-    product.overallScore >= 80
-      ? "text-emerald-800 bg-emerald-50 border-emerald-200"
-      : product.overallScore >= 55
-      ? "text-amber-800 bg-amber-50 border-amber-200"
-      : "text-rose-800 bg-rose-50 border-rose-200";
+  const scoreColor = isNutritionIncomplete
+    ? "text-slate-700 bg-slate-100 border-slate-200"
+    : product.overallScore >= 80
+    ? "text-emerald-800 bg-emerald-50 border-emerald-200"
+    : product.overallScore >= 55
+    ? "text-amber-800 bg-amber-50 border-amber-200"
+    : "text-rose-800 bg-rose-50 border-rose-200";
 
   // Positives & Negatives (Yuka style)
   const positives: { label: string; detail: string }[] = [];
@@ -216,7 +217,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className={`p-5 rounded-2xl border flex flex-col items-center justify-center text-center ${scoreColor}`}>
               <span className="font-num text-4xl font-extrabold tracking-tight">{product.overallScore}</span>
-              <span className="text-xs font-medium mt-1 opacity-80 uppercase tracking-wider">Overall GoodBite Score</span>
+              <span className="text-xs font-medium mt-1 opacity-80 uppercase tracking-wider">
+                {isNutritionIncomplete ? "Price & Match Score" : "Overall GoodBite Score"}
+              </span>
             </div>
 
             <div className="sm:col-span-2 p-5 rounded-2xl bg-[#F5F5F7] border border-black/[0.04] flex flex-col justify-center space-y-1">
@@ -237,6 +240,35 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Score Component Breakdown */}
+          <div className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500">
+              Score Breakdown
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <div className="p-3 rounded-xl bg-[#F5F5F7] border border-black/[0.04]">
+                <div className="text-stone-500 text-[10px] uppercase font-bold">🎯 Search Match</div>
+                <div className="font-num font-extrabold text-[#1D1D1F] mt-0.5">{product.scoreParts.relevance} / 100</div>
+              </div>
+              <div className="p-3 rounded-xl bg-[#F5F5F7] border border-black/[0.04]">
+                <div className="text-stone-500 text-[10px] uppercase font-bold">💰 Price Value</div>
+                <div className="font-num font-extrabold text-[#1D1D1F] mt-0.5">{product.scoreParts.price} / 100</div>
+              </div>
+              <div className="p-3 rounded-xl bg-[#F5F5F7] border border-black/[0.04]">
+                <div className="text-stone-500 text-[10px] uppercase font-bold">🥗 Nutrition Quality</div>
+                <div className="font-num font-extrabold text-[#1D1D1F] mt-0.5">
+                  {health.nutriScore === "unknown" ? "Unrated" : `${product.scoreParts.health} / 100`}
+                </div>
+              </div>
+              <div className="p-3 rounded-xl bg-[#F5F5F7] border border-black/[0.04]">
+                <div className="text-stone-500 text-[10px] uppercase font-bold">🥦 Diet Fit</div>
+                <div className="font-num font-extrabold text-[#1D1D1F] mt-0.5">
+                  {product.scoreParts.diet > 0 ? `${product.scoreParts.diet} / 100` : "N/A"}
+                </div>
+              </div>
             </div>
           </div>
 

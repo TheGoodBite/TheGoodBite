@@ -34,11 +34,13 @@ export function rankProducts(input: {
         dietFit.warnings.push(`Contains selected allergen: ${matchedAllergens.join(", ")}`);
       }
 
-      const overallScore = clamp(
-        Math.round(relevance * 0.25 + price * 0.2 + healthScore + dietFit.score * 0.25 + history - allergenPenalty),
-        0,
-        100
-      );
+      // If health classification is unknown (OFF data missing), scale based on relevance and price instead of penalizing to 0
+      const isHealthUnknown = health.classification === "unknown" && health.nutriScore === "unknown";
+      const rawOverall = isHealthUnknown
+        ? relevance * 0.5 + price * 0.4 + history
+        : relevance * 0.25 + price * 0.2 + healthScore + dietFit.score * 0.25 + history;
+
+      const overallScore = clamp(Math.round(rawOverall - allergenPenalty), 0, 100);
 
       return {
         ...candidate,
@@ -77,9 +79,11 @@ function scorePrice(price: number | null, min: number, max: number) {
 
 function buildExplanation(candidate: ProductCandidate, health: HealthInfo, dietScore: number, priceScore: number, matchedAllergens: Allergen[] = []) {
   if (matchedAllergens.length > 0) return `⚠️ Warning: May contain selected allergen (${matchedAllergens.join(", ")}).`;
+  if (health.classification === "unknown" && health.nutriScore === "unknown") {
+    return "ℹ️ Nutrition data unavailable in Open Food Facts database for this item. Score reflects search match & estimated price.";
+  }
   if (dietScore >= 70) return "Strong diet fit with a reasonable estimated price.";
   if (health.classification === "strict") return "Better health score than most similar options.";
   if (priceScore >= 80) return "Low estimated price, but check the health badges.";
-  if (health.classification === "unknown") return "Nutrition match is unknown, so compare carefully.";
   return `${candidate.seller ? `${candidate.seller} result with` : "Product with"} balanced price and nutrition signals.`;
 }
