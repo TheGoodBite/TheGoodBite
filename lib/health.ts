@@ -8,7 +8,7 @@ export const UNKNOWN_HEALTH: HealthInfo = {
   nutrition: {},
   labelsTags: [],
   categoriesTags: [],
-  allergensTags: []
+  allergensTags: [],
 };
 
 export function classifyHealth(input: {
@@ -24,11 +24,13 @@ export function classifyHealth(input: {
   allergensTags?: string[];
 }): HealthInfo {
   const nutriScore = normalizeNutriScore(input.nutriScore);
-  const novaGroup = typeof input.novaGroup === "number" ? input.novaGroup : null;
+  const novaGroup =
+    typeof input.novaGroup === "number" ? input.novaGroup : null;
 
   let classification: HealthInfo["classification"] = "unknown";
   if (nutriScore === "a" || nutriScore === "b") {
-    classification = novaGroup === null || novaGroup <= 3 ? "strict" : "fallback";
+    classification =
+      novaGroup === null || novaGroup <= 3 ? "strict" : "fallback";
   } else if (nutriScore === "c") {
     classification = "fallback";
   } else if (nutriScore === "d" || nutriScore === "e" || novaGroup === 4) {
@@ -46,7 +48,7 @@ export function classifyHealth(input: {
     ingredientsText: input.ingredientsText,
     labelsTags: input.labelsTags ?? [],
     categoriesTags: input.categoriesTags ?? [],
-    allergensTags: input.allergensTags ?? []
+    allergensTags: input.allergensTags ?? [],
   };
 }
 
@@ -82,7 +84,9 @@ export function hasNutritionInfo(health?: HealthInfo | null): boolean {
   );
 }
 
-function normalizeNutriScore(value: string | null | undefined): HealthInfo["nutriScore"] {
+function normalizeNutriScore(
+  value: string | null | undefined,
+): HealthInfo["nutriScore"] {
   const normalized = value?.toLowerCase();
   return normalized === "a" ||
     normalized === "b" ||
@@ -91,4 +95,22 @@ function normalizeNutriScore(value: string | null | undefined): HealthInfo["nutr
     normalized === "e"
     ? normalized
     : "unknown";
+}
+
+// A score, processing category, ingredient list, or title tag is not a nutrition facts panel.
+export function hasVerifiedNutritionFacts(health?: HealthInfo | null): boolean {
+  if (!health?.source || health.availability !== "matched") return false;
+  const n = health.nutrition;
+  return [
+    n.energyKcal100g,
+    n.protein100g,
+    n.carbohydrates100g,
+    n.sugars100g,
+    n.saturatedFat100g,
+    n.sodium100g,
+    n.fiber100g,
+  ].some(
+    (value) =>
+      typeof value === "number" && Number.isFinite(value) && value >= 0,
+  );
 }

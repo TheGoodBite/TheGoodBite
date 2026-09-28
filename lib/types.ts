@@ -152,6 +152,7 @@ export type SearchProductsResponse = {
     error?: string;
     warnings?: string[];
     excludedCount?: number;
+    emptyReason?: "nutrition_unavailable" | "nutrition_missing";
   }>;
   entitlement: Pick<
     Entitlement,

@@ -23,8 +23,12 @@ it.skipIf(process.env.MEEZANY_LIVE_TESTS !== "1")(
       nutritionMatches: result.options.filter((o) => o.health.source).length,
       sources: result.options.map((o) => o.priceSource),
     });
-    expect(result.options.length).toBeGreaterThan(0);
+    // Missing nutrition now yields an explained empty result, never unsupported options.
+    if (!result.options.length && result.excludedCount)
+      expect(result.warnings?.length).toBeGreaterThan(0);
+    const { hasVerifiedNutritionFacts } = await import("@/lib/health");
     for (const product of result.options) {
+      expect(hasVerifiedNutritionFacts(product.health)).toBe(true);
       expect(product.provider).toBe("serpapi_google_shopping");
       expect(product.market).toBe("US-search");
       if (product.estimatedPrice !== null) expect(product.currency).toBe("USD");

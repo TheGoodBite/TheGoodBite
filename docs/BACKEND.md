@@ -1,6 +1,6 @@
 # Meezany backend implementation
 
-Updated September 27, 2026. This describes shipped behavior; the full product vision remains in the README and visual direction in BRAND_GUIDELINES.md.
+Updated September 28, 2026. This describes shipped behavior; the full product vision remains in the README and visual direction in BRAND_GUIDELINES.md.
 
 ## Search and product identity
 
@@ -18,7 +18,7 @@ Open Food Facts uses one shared US catalog lookup per grocery query. Up to three
 
 Only explicit per-100g nutriments are mapped, including carbohydrates. Missing values stay missing. Product details expose the nutrition source and match method. The existing nutrition algorithm is not a calibrated category-relative score; the combined score is labeled Match score.
 
-Diet evaluation distinguishes match, conflict, and unknown. Missing nutrient data does not count as meeting a nutrient goal. Selected allergen conflicts and categorical vegan/vegetarian/gluten-free/FODMAP conflicts are excluded. Unknown products remain visible with uncertainty; absence of an allergen mention is not proof of safety. Ingredients, traces, and labels are imperfect source data. FODMAP remains a beta signal dependent on portion and preparation; absence of a keyword is not a positive match.
+Diet evaluation distinguishes match, conflict, and unknown. Missing nutrient data does not count as meeting a nutrient goal. Selected allergen conflicts and categorical vegan/vegetarian/gluten-free/FODMAP conflicts are excluded. Products without a matched nutrition source and at least one finite, nonnegative value shown in the nutrition panel are hidden before price enrichment and ranking. Scores, ingredients, and title tags alone do not qualify. A zero nutrient value counts as data. Empty results distinguish lookup failure from missing nutrition. Partial nutrition stays visible with missing fields marked unknown; absence of an allergen mention is not proof of safety. Ingredients, traces, and labels are imperfect source data. FODMAP remains a beta signal dependent on portion and preparation; absence of a keyword is not a positive match.
 
 ## Prices and provenance
 

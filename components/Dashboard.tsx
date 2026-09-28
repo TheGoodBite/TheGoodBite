@@ -774,7 +774,13 @@ export default function Dashboard() {
                             <ScoreBadge product={best} />
                           </>
                         ) : result ? (
-                          "No matching products found"
+                          result.emptyReason === "nutrition_unavailable" ? (
+                            "Nutrition lookup unavailable. No products shown; try again shortly."
+                          ) : result.emptyReason === "nutrition_missing" ? (
+                            "No products with matched nutrition facts found."
+                          ) : (
+                            "No matching products found"
+                          )
                         ) : (
                           "Ready to find your better pick"
                         )}
