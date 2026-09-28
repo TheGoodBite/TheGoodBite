@@ -9,13 +9,15 @@ import {
   Wheat,
   Dumbbell,
   Info,
+  TriangleAlert,
 } from "lucide-react";
 import type { Allergen, RankedProduct } from "@/lib/types";
 import { ALLERGEN_DETAILS, checkAllergens } from "@/lib/allergens";
-import { extractTags } from "@/lib/tags";
+import { extractTags, TAG_EXPLANATIONS } from "@/lib/tags";
 import {
   ProductImage,
   ProductPrice,
+  NutriScoreBadge,
   ScoreBadge,
   priceLocationExplanation,
 } from "./ProductPresentation";
@@ -36,10 +38,17 @@ export function ProductDetail({
   onOptions: () => void;
 }) {
   const [tab, setTab] = useState("Nutrition");
+  const [expandedTag, setExpandedTag] = useState<string | null>(null);
   const id = useId();
   const health = product.health;
   const n = health.nutrition;
   const allergens = checkAllergens(health, product.title, allergies);
+  const tags = extractTags(health, product.title);
+  const concernIds = new Set(["nova4", "high_sugar", "high_sodium", "sweeteners"]);
+  const concerns = tags.filter((tag) => concernIds.has(tag.id));
+  const positives = tags.filter((tag) => tag.color === "green" || tag.id === "non_gmo");
+  const attributes = tags.filter((tag) => !concernIds.has(tag.id) && !positives.includes(tag));
+  const preferenceFit = product.preferenceFit;
   const facts = [
     { label: "Calories", value: n.energyKcal100g, unit: "kcal", icon: Flame },
     { label: "Protein", value: n.protein100g, unit: "g", icon: Dumbbell },
@@ -83,6 +92,7 @@ export function ProductDetail({
           <strong>Match score</strong>
           <span>Nutrition, price & your preferences</span>
         </div>
+        <NutriScoreBadge product={product} />
       </div>
       <h2>{product.title}</h2>
       <div className="price-line">
@@ -110,13 +120,6 @@ export function ProductDetail({
           ? ` · $${(product.estimatedPrice / servings).toFixed(2)} / serving`
           : ""}
       </p>
-      {product.preferenceFit && (
-        <div className="preference-evidence">
-          {product.preferenceFit.matches.length > 0 && <p className="fine-print">Preference matches: {product.preferenceFit.matches.join(", ")}</p>}
-          {!!product.preferenceFit.unmet?.length && <p className="fine-print">Below your preferences: {product.preferenceFit.unmet.join(", ")}</p>}
-          {product.preferenceFit.unknown.length > 0 && <p className="fine-print">Unknown preferences: {product.preferenceFit.unknown.join(", ")}</p>}
-        </div>
-      )}
       {product.unitPrice && (
         <p className="fine-print">
           ${product.unitPrice.amount.toFixed(2)} / {product.unitPrice.unit}
@@ -128,13 +131,73 @@ export function ProductDetail({
           verified.
         </p>
       )}
-      <div className="tags">
-        {extractTags(health, product.title).map((tag) => (
-          <span className={`tag tag-${tag.color}`} key={tag.id}>
-            {tag.color === "green" && <Check size={13} />}
-            {tag.label}
-          </span>
-        ))}
+      <div className="product-signals">
+        {(concerns.length > 0 || !!preferenceFit?.unmet?.length) && (
+          <section className="signal-group signal-concerns" aria-labelledby={`${id}-concerns`}>
+            <h3 id={`${id}-concerns`}><TriangleAlert size={17} /> Things to watch</h3>
+            <ul className="signal-list">
+              {concerns.map((tag) => (
+                <li key={tag.id}>
+                  <TriangleAlert size={16} aria-hidden="true" />
+                  <div>
+                    <button
+                      className="signal-explain-button"
+                      aria-expanded={expandedTag === tag.id}
+                      aria-controls={`${id}-tag-${tag.id}`}
+                      onClick={() => setExpandedTag((current) => current === tag.id ? null : tag.id)}
+                    >
+                      {tag.label}<Info size={14} aria-hidden="true" />
+                    </button>
+                    {tag.id === "nova4" && <p>NOVA 4 · highest processing group</p>}
+                    {expandedTag === tag.id && <p className="tag-explanation" id={`${id}-tag-${tag.id}`}>{TAG_EXPLANATIONS[tag.id]}</p>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {!!preferenceFit?.unmet?.length && <p className="signal-note">Below your preferences: {preferenceFit.unmet.join(", ")}</p>}
+          </section>
+        )}
+        {(positives.length > 0 || !!preferenceFit?.matches.length) && (
+          <section className="signal-group signal-positives" aria-labelledby={`${id}-positives`}>
+            <h3 id={`${id}-positives`}><Check size={17} /> Positives & preference matches</h3>
+            <div className="tags">
+              {positives.map((tag) => (
+                <button
+                  className="tag tag-green"
+                  key={tag.id}
+                  aria-expanded={expandedTag === tag.id}
+                  aria-controls={`${id}-tag-${tag.id}`}
+                  onClick={() => setExpandedTag((current) => current === tag.id ? null : tag.id)}
+                >
+                  <Check size={13} aria-hidden="true" />{tag.label}<Info size={13} aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+            {positives.map((tag) => expandedTag === tag.id && <p className="tag-explanation" id={`${id}-tag-${tag.id}`} key={tag.id}>{TAG_EXPLANATIONS[tag.id]}</p>)}
+            {!!preferenceFit?.matches.length && <p className="signal-note">Matches your preferences: {preferenceFit.matches.join(", ")}</p>}
+          </section>
+        )}
+        {(attributes.length > 0 || !!preferenceFit?.unknown.length || health.novaGroup == null) && (
+          <section className="signal-group signal-neutral" aria-labelledby={`${id}-attributes`}>
+            <h3 id={`${id}-attributes`}><Info size={17} /> Other details</h3>
+            <div className="tags">
+              {attributes.map((tag) => (
+                <button
+                  className="tag"
+                  key={tag.id}
+                  aria-expanded={expandedTag === tag.id}
+                  aria-controls={`${id}-tag-${tag.id}`}
+                  onClick={() => setExpandedTag((current) => current === tag.id ? null : tag.id)}
+                >
+                  {tag.label}<Info size={13} aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+            {attributes.map((tag) => expandedTag === tag.id && <p className="tag-explanation" id={`${id}-tag-${tag.id}`} key={tag.id}>{TAG_EXPLANATIONS[tag.id]}</p>)}
+            {health.novaGroup == null && <p className="signal-note">Processing level unknown</p>}
+            {!!preferenceFit?.unknown.length && <p className="signal-note">Not verified: {preferenceFit.unknown.join(", ")}</p>}
+          </section>
+        )}
       </div>
       {allergens.length > 0 && (
         <p className="notice">

@@ -11,8 +11,8 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#111111",
     icons: [
       {
-        src: "/brand/meezany-icon.png",
-        sizes: "1536x1536",
+        src: "/brand/meezany-orange-icon.png",
+        sizes: "256x256",
         type: "image/png"
       }
     ]

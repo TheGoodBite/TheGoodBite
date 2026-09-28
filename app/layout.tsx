@@ -11,7 +11,10 @@ export const metadata: Metadata = {
     "Convert your grocery list into ranked healthy products sorted by price. Filter by diets, allergens, FODMAP status, and nutrition quality.",
   keywords: ["grocery", "healthy food", "nutrition score", "diet", "product ranking", "fodmap", "allergens"],
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/brand/meezany-mark.svg", apple: "/brand/meezany-icon.png" },
+  icons: {
+    icon: "/brand/meezany-orange-icon.ico",
+    apple: "/brand/meezany-orange-icon.png"
+  },
   openGraph: {
     title: "Meezany | Better groceries, without the homework.",
     description: "Ranked grocery product discovery with nutrition, budget, and diet-fit scores.",

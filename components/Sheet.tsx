@@ -7,11 +7,13 @@ export function Sheet({
   title,
   onClose,
   children,
+  footer,
   wide = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  footer?: ReactNode;
   wide?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -30,7 +32,7 @@ export function Sheet({
   return (
     <dialog
       ref={dialog}
-      className={`sheet ${wide ? "sheet-wide" : ""}`}
+      className={`sheet ${wide ? "sheet-wide" : ""} ${footer ? "sheet-with-footer" : ""}`}
       aria-label={title}
       onCancel={(event) => {
         event.preventDefault();
@@ -54,6 +56,7 @@ export function Sheet({
         </header>
         {children}
       </div>
+      {footer && <footer className="sheet-footer">{footer}</footer>}
     </dialog>
   );
 }

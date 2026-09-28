@@ -38,7 +38,7 @@ import { consumeSearch } from "@/lib/searchStream";
 import { normalizeQuery } from "@/lib/utils";
 import { MeezanyLogo } from "./MeezanyLogo";
 import { Sheet } from "./Sheet";
-import { ProductImage, ProductPrice, ScoreBadge, priceLabel } from "./ProductPresentation";
+import { ProductImage, ProductPrice, NutriScoreBadge, ScoreBadge, priceLabel } from "./ProductPresentation";
 import { ProductDetail } from "./ProductDetail";
 
 const DIET_LABELS: Record<DietMode, string> = {
@@ -806,7 +806,10 @@ export default function Dashboard() {
                             onClick={() => select(query, product)}
                             aria-label={`View ${product.title}, ${priceLabel(product)}`}
                           >
-                            <ProductImage product={product} />
+                            <span className="product-thumb-photo">
+                              <ProductImage product={product} />
+                            </span>
+                            <NutriScoreBadge product={product} />
                             <ProductPrice product={product} />
                           </button>
                         ))}
@@ -955,7 +958,18 @@ export default function Dashboard() {
         {navigation}
       </nav>
       {overlay === "preferences" && (
-        <Sheet title="Preferences" onClose={() => setOverlay(null)}>
+        <Sheet
+          title="Preferences"
+          onClose={() => setOverlay(null)}
+          footer={
+            <button
+              className="primary-button full-width"
+              onClick={() => setOverlay(null)}
+            >
+              Done
+            </button>
+          }
+        >
           <p className="sheet-intro">
             A few preferences. More useful recommendations.
           </p>
@@ -1018,12 +1032,6 @@ export default function Dashboard() {
           <p className="fine-print">
             Prices prefer your ZIP, then your state. Observations are dated estimates, not confirmed local shelf prices.
           </p>
-          <button
-            className="primary-button full-width"
-            onClick={() => setOverlay(null)}
-          >
-            Done
-          </button>
         </Sheet>
       )}
       {overlay === "account" && (
@@ -1273,6 +1281,7 @@ export default function Dashboard() {
                 <div className="option-photo">
                   <ProductImage product={product} />
                 </div>
+                <NutriScoreBadge product={product} />
                 <div>
                   <ScoreBadge product={product} />
                   <small> Match score</small>

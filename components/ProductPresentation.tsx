@@ -21,6 +21,17 @@ export function ProductImage({ product }: { product: RankedProduct }) {
   );
 }
 
+export function NutriScoreBadge({ product }: { product: RankedProduct }) {
+  const grade = product.health.nutriScore;
+  const label = grade === "unknown" ? "Nutri-Score unavailable" : `Nutri-Score ${grade.toUpperCase()}`;
+  return (
+    <span className={`nutri-score nutri-score-${grade}`} title={label} aria-label={label}>
+      <span aria-hidden="true">Nutri</span>
+      <strong aria-hidden="true">{grade === "unknown" ? "?" : grade.toUpperCase()}</strong>
+    </span>
+  );
+}
+
 export function ScoreBadge({
   product,
   large = false,
