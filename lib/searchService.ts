@@ -44,6 +44,8 @@ export async function searchItem(
       query,
       candidates,
       healthById: catalog.healthById,
+      productPreferences: preferences.productPreferences,
+      unwantedIngredients: preferences.unwantedIngredients,
       dietModes: preferences.dietModes ?? [],
       allergies: preferences.allergies ?? [],
       bulkPreference: preferences.bulkPreference,
@@ -53,7 +55,7 @@ export async function searchItem(
   const excludedCount = catalog.candidates.length - eligible.length;
   if (excludedCount)
     warnings.add(
-      `${excludedCount} catalog option${excludedCount === 1 ? "" : "s"} excluded for relevance or preference conflicts.`,
+      `${excludedCount} catalog option${excludedCount === 1 ? "" : "s"} excluded for relevance, preference conflicts, or missing mandatory evidence.`,
     );
   const selected = eligible.slice(
     0,

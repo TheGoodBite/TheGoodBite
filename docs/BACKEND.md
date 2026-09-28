@@ -65,3 +65,15 @@ The reported sausage request (high protein, dairy avoidance, everyday packs, ZIP
 ## Remaining product work
 
 Calibrated category-relative scoring, store inventory integrations, recipe generation, per-item preference exceptions, full preference synchronization, and the other vision features are separate work. Better recall should come from catalog query coverage and pagination while preserving product identity. Tune ranking with representative real lists before making performance or nutrition-quality claims.
+
+## Product attributes and importance
+
+Search accepts `productPreferences`, a partial mapping of the supported OFF attribute IDs to `not_important`, `important`, `very_important`, or `mandatory`, plus up to 20 `unwantedIngredients` strings (80 characters each). The UI offers all 29 requested settings in six groups. Additional existing nutrient/FODMAP goals remain separate. Legacy allergy selections migrate to mandatory attributes; overlapping legacy diet controls migrate without duplicate scoring. Old API payloads remain supported. Preferences stay local to the browser; changing them marks current results stale until searching again.
+
+Catalog requests include `attribute_groups_en` and `ingredients_tags`. Native OFF match/status evidence is retained in nutrition records. Scores outside 0–100 or unknown status are treated as unknown, not matches. Importance weights are 1, 2, and 4; not-important has no effect. Active attribute preferences contribute 30% of the combined match score, with the prior relevance/price/nutrition/goal score contributing 70%. These are Meezany ranking choices, not a claim to exactly reproduce OFF's personalization algorithm.
+
+Mandatory attributes require known evidence with at least 80% match. Allergen absence, vegan/vegetarian, palm-oil-free, label claims, and unwanted ingredient absence require 100%; allergen traces cannot pass. Not-applicable attributes are omitted. Missing mandatory evidence hides the product before pricing. Known below-threshold soft preferences remain visible with an explanation; unknown soft preferences remain visible and are identified in the detail panel. Allergen data is not a safety guarantee.
+
+Unwanted ingredient matching is local and conservative: ingredient text or canonical tags can identify a named conflict; ingredient analysis tags are needed to establish absence. Missing terms or analysis produce unknown. Synonyms, translations, completeness, and composition changes are limitations shown in the UI. This is not OFF's parameterized canonical-ingredient API algorithm.
+
+Catalog cache schema moves to `off:v5:us-search`; if a fresh request fails, still-valid v4 catalog records can serve as fallback. Older records without attributes cannot satisfy mandatory preferences. A cache failure does not weaken mandatory rules. See [Bulk import plan](DATA_IMPORT_PLAN.md) for the deferred snapshot/worker proposal.

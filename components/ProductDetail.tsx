@@ -110,6 +110,13 @@ export function ProductDetail({
           ? ` · $${(product.estimatedPrice / servings).toFixed(2)} / serving`
           : ""}
       </p>
+      {product.preferenceFit && (
+        <div className="preference-evidence">
+          {product.preferenceFit.matches.length > 0 && <p className="fine-print">Preference matches: {product.preferenceFit.matches.join(", ")}</p>}
+          {!!product.preferenceFit.unmet?.length && <p className="fine-print">Below your preferences: {product.preferenceFit.unmet.join(", ")}</p>}
+          {product.preferenceFit.unknown.length > 0 && <p className="fine-print">Unknown preferences: {product.preferenceFit.unknown.join(", ")}</p>}
+        </div>
+      )}
       {product.unitPrice && (
         <p className="fine-print">
           ${product.unitPrice.amount.toFixed(2)} / {product.unitPrice.unit}

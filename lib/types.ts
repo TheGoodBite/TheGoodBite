@@ -29,6 +29,47 @@ export const ALLERGENS = [
 
 export type Allergen = (typeof ALLERGENS)[number];
 
+export const PRODUCT_PREFERENCE_IDS = [
+  "nutriscore",
+  "low_salt",
+  "low_sugars",
+  "low_fat",
+  "low_saturated_fat",
+  "nova",
+  "additives",
+  "allergens_no_gluten",
+  "allergens_no_milk",
+  "allergens_no_eggs",
+  "allergens_no_nuts",
+  "allergens_no_peanuts",
+  "allergens_no_sesame_seeds",
+  "allergens_no_soybeans",
+  "allergens_no_celery",
+  "allergens_no_mustard",
+  "allergens_no_lupin",
+  "allergens_no_fish",
+  "allergens_no_crustaceans",
+  "allergens_no_molluscs",
+  "allergens_no_sulphur_dioxide_and_sulphites",
+  "vegan",
+  "vegetarian",
+  "palm_oil_free",
+  "labels_organic",
+  "labels_fair_trade",
+  "ecoscore",
+  "forest_footprint",
+  "unwanted_ingredients"
+] as const;
+export type ProductPreferenceId = (typeof PRODUCT_PREFERENCE_IDS)[number];
+export const PREFERENCE_IMPORTANCE = ["not_important", "important", "very_important", "mandatory"] as const;
+export type PreferenceImportance = (typeof PREFERENCE_IMPORTANCE)[number];
+export type ProductPreferences = Partial<Record<ProductPreferenceId, PreferenceImportance>>;
+export type ProductAttribute = {
+  status: "known" | "unknown" | "not-applicable";
+  match?: number;
+  title?: string;
+};
+
 export type SubscriptionStatus =
   "free" | "active" | "trialing" | "past_due" | "canceled" | "unpaid";
 
@@ -100,6 +141,7 @@ export type HealthInfo = {
     fiber100g?: number;
     energyKcal100g?: number;
     saturatedFat100g?: number;
+    fat100g?: number;
   };
   source?: {
     provider: "open_food_facts";
@@ -116,6 +158,8 @@ export type HealthInfo = {
   labelsTags: string[];
   categoriesTags: string[];
   allergensTags: string[];
+  attributes?: Partial<Record<ProductPreferenceId, ProductAttribute>>;
+  ingredientsTags?: string[];
 };
 
 export type DietFit = {
@@ -138,10 +182,13 @@ export type RankedProduct = ProductCandidate & {
   dietFit: DietFit;
   explanation: string;
   allergyStatus?: "conflict" | "unknown" | "not_detected";
+  preferenceFit?: { score: number; matches: string[]; unknown: string[]; unmet?: string[] };
 };
 
 export type SearchProductsRequest = {
   items: string[];
+  productPreferences?: ProductPreferences;
+  unwantedIngredients?: string[];
   dietModes?: DietMode[];
   allergies?: Allergen[];
   zipCode?: string;

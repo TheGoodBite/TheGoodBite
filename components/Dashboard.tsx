@@ -1,5 +1,9 @@
 "use client";
 
+import { PreferenceControls } from "./PreferenceControls";
+import { restoreProductPreferences, EXTRA_DIET_MODES } from "@/lib/preferenceStorage";
+import type { ProductPreferences } from "@/lib/types";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
@@ -24,8 +28,6 @@ import {
 } from "lucide-react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import {
-  ALLERGENS,
-  DIET_MODES,
   type Allergen,
   type DietMode,
   type RankedProduct,
@@ -85,6 +87,9 @@ export default function Dashboard() {
   const [optionQuery, setOptionQuery] = useState("");
   const [sort, setSort] = useState("match");
   const [overlay, setOverlay] = useState<Overlay>(null);
+  const [productPreferences, setProductPreferences] = useState<ProductPreferences>({});
+  const [unwantedIngredientsText, setUnwantedIngredientsText] = useState("");
+  const unwantedIngredients = [...new Set(unwantedIngredientsText.split(/[,\n]/).map(value => value.trim().toLowerCase()).filter(Boolean))];
   const [dietModes, setDietModes] = useState<DietMode[]>([]);
   const [allergies, setAllergies] = useState<Allergen[]>([]);
   const [bulkPreference, setBulkPreference] = useState<
@@ -107,7 +112,10 @@ export default function Dashboard() {
     (!supabase && process.env.NODE_ENV !== "production"
       ? "dev-token"
       : undefined);
+  const preferenceCount = dietModes.length + allergies.length + Object.values(productPreferences).filter(value => value !== "not_important").length;
   const preferenceKey = JSON.stringify({
+    productPreferences,
+    unwantedIngredients,
     dietModes,
     allergies,
     zipCode,
@@ -146,12 +154,13 @@ export default function Dashboard() {
       const avoid =
         saved?.allergies ??
         JSON.parse(localStorage.getItem("goodbite_allergies") || "[]");
-      if (Array.isArray(avoid))
-        setAllergies(avoid.filter((a: Allergen) => ALLERGENS.includes(a)));
-      if (Array.isArray(saved?.dietModes))
-        setDietModes(
-          saved.dietModes.filter((d: DietMode) => DIET_MODES.includes(d)),
-        );
+      const restored = restoreProductPreferences({ ...saved, allergies: avoid });
+      setProductPreferences(restored.preferences);
+      setDietModes(restored.modes);
+      setAllergies([]);
+      if (Array.isArray(saved?.unwantedIngredients))
+        setUnwantedIngredientsText(saved.unwantedIngredients.filter((value: unknown) => typeof value === "string").join(", "));
+
     } catch {
       /* Invalid or blocked storage should not prevent using the app. */
     }
@@ -331,6 +340,8 @@ export default function Dashboard() {
         },
         body: JSON.stringify({
           items: queries,
+          productPreferences,
+          unwantedIngredients,
           dietModes,
           allergies,
           bulkPreference,
@@ -484,8 +495,8 @@ export default function Dashboard() {
       <button onClick={() => setOverlay("preferences")}>
         <SlidersHorizontal size={21} />
         <span>Preferences</span>
-        {dietModes.length + allergies.length > 0 && (
-          <span className="count">{dietModes.length + allergies.length}</span>
+        {preferenceCount > 0 && (
+          <span className="count">{preferenceCount}</span>
         )}
       </button>
       <button onClick={loadLists}>
@@ -636,8 +647,8 @@ export default function Dashboard() {
                   onClick={() => setOverlay("preferences")}
                 >
                   <SlidersHorizontal size={16} />
-                  {dietModes.length + allergies.length
-                    ? `${dietModes.length + allergies.length} preference${dietModes.length + allergies.length === 1 ? "" : "s"}`
+                  {preferenceCount
+                    ? `${preferenceCount} preference${preferenceCount === 1 ? "" : "s"}`
                     : "Make it yours"}
                 </button>
                 <div>
@@ -677,7 +688,7 @@ export default function Dashboard() {
                 Preferences changed. Search again to update your options.
               </p>
             )}
-            {allergies.length > 0 && (
+            {(allergies.length > 0 || Object.entries(productPreferences).some(([id, importance]) => id.startsWith("allergens_no_") && importance !== "not_important")) && (
               <p className="fine-print allergy-note">
                 Allergen information can be incomplete. Always check the package
                 before buying or eating.
@@ -948,8 +959,11 @@ export default function Dashboard() {
           <p className="sheet-intro">
             A few preferences. More useful recommendations.
           </p>
-          <h3>Diet & goals</h3>
-          {DIET_MODES.map((mode) => (
+          <PreferenceControls value={productPreferences}
+            onChange={(id, importance) => setProductPreferences(current => ({ ...current, [id]: importance }))}
+            unwantedIngredients={unwantedIngredientsText} onUnwantedChange={setUnwantedIngredientsText} />
+          <h3>Additional goals</h3>
+          {EXTRA_DIET_MODES.map((mode) => (
             <label className="switch-row" key={mode}>
               <span>{DIET_LABELS[mode]}</span>
               <input
@@ -967,29 +981,7 @@ export default function Dashboard() {
               <span className="switch" />
             </label>
           ))}
-          <h3>Allergies & avoid</h3>
-          {ALLERGENS.map((allergen) => (
-            <label className="switch-row" key={allergen}>
-              <span>{ALLERGEN_DETAILS[allergen].label}</span>
-              <input
-                type="checkbox"
-                role="switch"
-                checked={allergies.includes(allergen)}
-                onChange={() =>
-                  setAllergies((current) =>
-                    current.includes(allergen)
-                      ? current.filter((a) => a !== allergen)
-                      : [...current, allergen],
-                  )
-                }
-              />
-              <span className="switch" />
-            </label>
-          ))}
-          <p className="fine-print">
-            Data can be inaccurate or incomplete. Always verify allergens on the
-            package. FODMAP is beta.
-          </p>
+          <p className="fine-print">FODMAP is beta and depends on portion and preparation.</p>
           <h3>Price & shopping</h3>
           <label className="field-label" htmlFor="bulk-preference">
             Package preference
@@ -1024,8 +1016,7 @@ export default function Dashboard() {
             onChange={(e) => setZipCode(e.target.value.replace(/\D/g, ""))}
           />
           <p className="fine-print">
-            Helps guide search. Prices are estimates, not confirmed local shelf
-            prices.
+            Prices prefer your ZIP, then your state. Observations are dated estimates, not confirmed local shelf prices.
           </p>
           <button
             className="primary-button full-width"

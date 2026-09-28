@@ -49,3 +49,7 @@ Run this deliberately after provider configuration changes or before a release. 
 ## Browser checks
 
 The offline integration suite operates on real Request/Response objects rather than launching a browser or hosted server. Desktop/mobile UI behavior still needs browser checks. Existing tests cover the stream decoder but do not test browser hydration, Google sign-in, or external storefronts.
+
+## Attribute preferences
+
+The offline suite exercises every supported native attribute's mandatory match/conflict/unknown handling, weighting, allergen traces, quality thresholds, invalid match values, ingredient conflicts and missing analysis, and persistence migration. Route integration tests prove mandatory exclusions happen before price calls and reject unsupported IDs/levels or oversized ingredient lists. Manual browser checks cover all controls, request payloads, saved values, and mobile layout. A real product response confirmed the native `attribute_groups_en` schema; this is not a guarantee that every catalog product has each attribute.

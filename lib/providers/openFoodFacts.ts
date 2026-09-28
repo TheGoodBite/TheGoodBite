@@ -1,6 +1,7 @@
-import { getOrSet } from "@/lib/cache";
+import { getJson, getOrSet } from "@/lib/cache";
 import { classifyHealth, UNKNOWN_HEALTH } from "@/lib/health";
-import type { HealthInfo, ProductCandidate } from "@/lib/types";
+import type { HealthInfo, ProductCandidate, ProductPreferenceId, ProductAttribute } from "@/lib/types";
+import { PRODUCT_PREFERENCE_IDS } from "@/lib/types";
 import { sha256, normalizeQuery } from "@/lib/utils";
 import {
   parsePackage,
@@ -33,9 +34,11 @@ export type OffProduct = {
   categories_tags?: string[];
   allergens_tags?: string[];
   traces_tags?: string[];
+  ingredients_tags?: string[];
+  attribute_groups_en?: { attributes?: { id?: string; status?: string; match?: number; title?: string }[] }[];
 };
 const FIELDS =
-  "code,product_name,brands,quantity,countries_tags,nutriscore_grade,nova_group,nutriments,serving_size,ingredients_text,labels_tags,categories_tags,allergens_tags,traces_tags,image_front_url,image_url";
+  "code,product_name,brands,quantity,countries_tags,nutriscore_grade,nova_group,nutriments,serving_size,ingredients_text,labels_tags,categories_tags,allergens_tags,traces_tags,image_front_url,image_url,ingredients_tags,attribute_groups_en";
 const unknown = (availability: "no_match" | "unavailable"): HealthInfo => ({
   ...UNKNOWN_HEALTH,
   availability,
@@ -121,6 +124,7 @@ export function fromOffProduct(
       fiber100g: nutrient("fiber"),
       energyKcal100g: nutrient("energy-kcal"),
       saturatedFat100g: nutrient("saturated-fat"),
+      fat100g: nutrient("fat"),
     },
     servingSize: product.serving_size,
     ingredientsText: product.ingredients_text,
@@ -134,6 +138,16 @@ export function fromOffProduct(
   const barcode = validBarcode(product.code);
   return {
     ...health,
+    attributes: Object.fromEntries((product.attribute_groups_en ?? []).flatMap(group =>
+      (group.attributes ?? []).filter(attribute =>
+        PRODUCT_PREFERENCE_IDS.includes(attribute.id as ProductPreferenceId) &&
+        ["known", "unknown", "not-applicable"].includes(attribute.status ?? ""),
+      ).map(attribute => [attribute.id, {
+        status: attribute.status as ProductAttribute["status"],
+        match: attribute.match, title: attribute.title,
+      }]),
+    )),
+    ingredientsTags: product.ingredients_tags,
     availability: "matched",
     source: {
       provider: "open_food_facts",
@@ -175,8 +189,9 @@ async function getByBarcode(code: string) {
   );
 }
 export async function searchCatalog(query: string) {
+  const queryHash = await sha256(normalizeQuery(query));
   return getOrSet<OffProduct[]>(
-    `off:v4:us-search:${await sha256(normalizeQuery(query))}`,
+    `off:v5:us-search:${queryHash}`,
     86400,
     async () => {
       await reserveBudget("off:search", 10, 60000);
@@ -201,7 +216,11 @@ export async function searchCatalog(query: string) {
         p.countries_tags?.includes("en:united-states"),
       );
     },
-  );
+  ).catch(async (error) => {
+    const previous = await getJson<{ value: OffProduct[] }>(`v2:off:v4:us-search:${queryHash}`);
+    if (previous?.value?.length) return previous.value;
+    throw error;
+  });
 }
 export async function enrichProducts(
   candidates: ProductCandidate[],

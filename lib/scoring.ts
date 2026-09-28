@@ -1,3 +1,4 @@
+import { evaluateProductPreferences } from "@/lib/productPreferences";
 import { checkAllergens } from "@/lib/allergens";
 import { scoreDietFit } from "@/lib/dietModes";
 import { scoreHealth } from "@/lib/health";
@@ -6,6 +7,7 @@ import type {
   DietMode,
   HealthInfo,
   ProductCandidate,
+  ProductPreferences,
   RankedProduct,
 } from "@/lib/types";
 import { clamp } from "@/lib/utils";
@@ -13,6 +15,8 @@ import { words } from "@/lib/products";
 
 export function rankProducts(input: {
   query: string;
+  productPreferences?: ProductPreferences;
+  unwantedIngredients?: string[];
   candidates: ProductCandidate[];
   healthById: Map<string, HealthInfo>;
   dietModes: DietMode[];
@@ -28,6 +32,7 @@ export function rankProducts(input: {
       return {
         candidate,
         health,
+        preferenceFit: evaluateProductPreferences(health, input.productPreferences, input.unwantedIngredients),
         dietFit: scoreDietFit(health, input.dietModes, candidate.title),
         allergens: checkAllergens(
           health,
@@ -37,8 +42,9 @@ export function rankProducts(input: {
       };
     })
     .filter(
-      ({ dietFit, allergens, candidate }) =>
+      ({ dietFit, allergens, candidate, preferenceFit }) =>
         !allergens.length &&
+        !preferenceFit.failedMandatory.length &&
         scoreRelevance(input.query, candidate) >= 50 &&
         !input.dietModes.some(
           (mode) =>
@@ -47,7 +53,7 @@ export function rankProducts(input: {
         ),
     );
   return prepared
-    .map(({ candidate, health, dietFit }): RankedProduct => {
+    .map(({ candidate, health, dietFit, preferenceFit }): RankedProduct => {
       const relevance = scoreRelevance(input.query, candidate);
       // Compare equivalent unit types, never dollars per bottle against dollars per case.
       const peers = prepared
@@ -102,6 +108,8 @@ export function rankProducts(input: {
           : ("unknown" as const)
         : undefined;
       const warnings = [...dietFit.warnings];
+      if (preferenceFit.unknown.length)
+        warnings.push(`Preference evidence missing: ${preferenceFit.unknown.join(", ")}.`);
       if (allergyStatus === "unknown")
         warnings.push("Allergen evidence is incomplete. Verify the package.");
       if (allergyStatus === "not_detected")
@@ -110,7 +118,8 @@ export function rankProducts(input: {
         );
       return {
         ...candidate,
-        overallScore: clamp(Math.round(score), 0, 100),
+        overallScore: clamp(Math.round(preferenceFit.active ? score * 0.7 + preferenceFit.score * 0.3 : score), 0, 100),
+        preferenceFit: preferenceFit.active ? { score: preferenceFit.score, matches: preferenceFit.matches, unknown: preferenceFit.unknown, unmet: preferenceFit.unmet } : undefined,
         scoreParts: {
           relevance,
           price,

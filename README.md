@@ -54,7 +54,8 @@ Later, people can share recipe photos with ingredient lists that others can add 
 - Next.js web dashboard with list editing, quick lookup, optional ZIP, ranked options, and expanded product details.
 - Google OAuth and email magic links via Supabase.
 - Open Food Facts product discovery restricted to US-market catalog records with nutrition facts.
-- Exact-barcode Open Prices observations, deterministic health/diet ranking, tags, allergen checks, and beta FODMAP signals. Shopping search is no longer used.
+- Exact-barcode Open Prices observations, deterministic health/diet ranking, tags, allergen checks, and beta FODMAP signals.
+- All 29 requested OFF attribute preferences with four importance levels, mandatory evidence filters, ingredient exclusions, and migration of existing selections. Shopping search is no longer used.
 - Supabase saved-list and bought-product APIs; Stripe checkout/webhook scaffolding.
 - Shared Upstash Redis caching and rolling request/provider budgets; Redis is required for production search.
 
@@ -113,6 +114,8 @@ Open Food Facts and Open Prices require no paid Shopping API key. Production sea
 Supabase tables: `profiles`, `grocery_lists`, `grocery_list_items`, `bought_products`, `user_preferences`. The migration defines authoritative columns and ownership policies. Service-role routes must enforce ownership because they bypass RLS. Local UI preferences are not yet cross-device preference sync.
 
 Redis caches provider/nutrition lookups. Ranking runs deterministically at request time. No recipe endpoint is implemented.
+
+Bulk exports and periodic refresh workers are deferred; see the [import recommendation](docs/DATA_IMPORT_PLAN.md).
 
 See [Testing](docs/TESTING.md) for offline integration tests, CI, optional live checks, and database verification.
 

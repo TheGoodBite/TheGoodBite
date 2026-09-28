@@ -284,6 +284,58 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
     expect(product.priceObservation?.locationMatch).toBe("zip");
     expect(calls).toHaveLength(2);
   });
+  it("filters mandatory evidence before pricing and preserves native preference explanations", async () => {
+    const base = fixture.catalog.products[0];
+    override = url => url.hostname === "world.openfoodfacts.org"
+      ? Response.json({ products: [
+          { ...base, attribute_groups_en: [{ attributes: [{ id: "low_salt", status: "known", match: 100 }] }] },
+          { ...base, code: "4006381333931", attribute_groups_en: [{ attributes: [{ id: "low_salt", status: "known", match: 0 }] }] },
+          { ...base, code: "96385074" },
+        ] }) : providers(url);
+    const row = (await json({ items: ["yogurt"], productPreferences: { low_salt: "mandatory" } })).items[0];
+    expect(row.options).toHaveLength(1);
+    expect(row.excludedCount).toBe(2);
+    expect(row.options[0].preferenceFit?.matches).toContain("Salt in low quantity");
+    expect(calls.filter(url => url.hostname === "prices.openfoodfacts.org")).toHaveLength(1);
+    expect(calls[0].searchParams.get("fields")).toContain("attribute_groups_en");
+  });
+  it("soft importance changes recommendation order while retaining conflicting options", async () => {
+    const base = fixture.catalog.products[0];
+    override = url => url.hostname === "world.openfoodfacts.org"
+      ? Response.json({ products: [
+          { ...base, attribute_groups_en: [{ attributes: [{ id: "labels_organic", status: "known", match: 0 }] }] },
+          { ...base, code: "4006381333931", attribute_groups_en: [{ attributes: [{ id: "labels_organic", status: "known", match: 100 }] }] },
+        ] }) : providers(url);
+    const row = (await json({ items: ["yogurt"], productPreferences: { labels_organic: "very_important" } })).items[0];
+    expect(row.options).toHaveLength(2);
+    expect(row.options[0].upc).toBe("4006381333931");
+    expect(row.options[1].preferenceFit?.unmet).toContain("Organic farming");
+  });
+  it("an older catalog cache cannot invent missing mandatory attribute evidence", async () => {
+    const { setJson } = await import("@/lib/cache");
+    const { sha256 } = await import("@/lib/utils");
+    await setJson(`v2:off:v4:us-search:${await sha256("yogurt")}`, { value: fixture.catalog.products }, 3600);
+    override = () => new Response("offline", { status: 503 });
+    const row = (await json({ items: ["yogurt"], productPreferences: { low_fat: "mandatory" } })).items[0];
+    expect(row.options).toEqual([]);
+    expect(row.warnings?.join(" ")).toContain("mandatory evidence");
+    expect(calls).toHaveLength(1);
+  });
+  it("does not spend price calls when all mandatory evidence is missing", async () => {
+    const row = (await json({ items: ["yogurt"], productPreferences: { forest_footprint: "mandatory" } })).items[0];
+    expect(row.options).toEqual([]);
+    expect(row.warnings?.join(" ")).toContain("mandatory evidence");
+    expect(calls).toHaveLength(1);
+  });
+  it.each([
+    { productPreferences: { low_salt: "sometimes" } },
+    { productPreferences: { invented_filter: "mandatory" } },
+    { unwantedIngredients: Array(21).fill("onion") },
+    { unwantedIngredients: ["a".repeat(81)] },
+  ])("validates preference requests before provider calls", async extra => {
+    expect((await request({ items: ["yogurt"], ...extra })).status).toBe(400);
+    expect(calls).toEqual([]);
+  });
   it.each(["foreign", "stale", "wrong-barcode", "other-state"])(
     "does not attach a %s receipt price",
     async (reason) => {

@@ -1439,3 +1439,25 @@ button:focus-visible .price-tooltip {
   outline-offset: 3px;
   border-radius: 3px;
 }
+
+.preference-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 155px);
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
+  font-size: 14px;
+}
+.preference-row select {
+  width: 100%;
+  padding: 8px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafaf8;
+  color: var(--ink, #111);
+  font-size: 13px;
+}
+.product-preferences section + section { margin-top: 24px; }
+.product-preferences .fine-print { margin: 10px 0; }
+.product-preferences textarea { margin-top: 8px; }

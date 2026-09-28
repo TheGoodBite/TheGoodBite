@@ -1,3 +1,4 @@
+import { PRODUCT_PREFERENCE_IDS, PREFERENCE_IMPORTANCE } from "@/lib/types";
 import { z } from "zod";
 import { handleRouteError, requireUserAndEntitlement } from "@/lib/api";
 import {
@@ -17,6 +18,8 @@ import { searchItem } from "@/lib/searchService";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 const searchSchema = z.object({
+  productPreferences: z.partialRecord(z.enum(PRODUCT_PREFERENCE_IDS), z.enum(PREFERENCE_IMPORTANCE)).default({}),
+  unwantedIngredients: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
   items: z.array(z.string().trim().min(1).max(160)).min(1).max(100),
   dietModes: z.array(z.enum(DIET_MODES)).max(DIET_MODES.length).default([]),
   allergies: z.array(z.enum(ALLERGENS)).max(ALLERGENS.length).default([]),
