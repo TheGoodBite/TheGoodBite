@@ -1,4 +1,5 @@
 import { getOrSet } from "@/lib/cache";
+import { postalZip, stateForZip } from "@/lib/zipState";
 import { validBarcode } from "@/lib/products";
 import { providerJson, reserveBudget } from "@/lib/providerRuntime";
 import type { PriceObservation } from "@/lib/types";
@@ -25,6 +26,16 @@ export function selectOpenPrice(
   zip?: string,
   now = new Date(),
 ): PriceObservation | null {
+  const requestedZip = postalZip(zip);
+  // An unresolvable ZIP permits exact observations only; never guess the state.
+  if (zip && !requestedZip) return null;
+  const requestedState = stateForZip(requestedZip);
+  const localityRank = (item: OpenPriceItem) => {
+    if (!requestedZip) return 0;
+    const observedZip = postalZip(item.location?.osm_address_postcode);
+    if (observedZip === requestedZip) return 0;
+    return requestedState && stateForZip(observedZip) === requestedState ? 1 : 2;
+  };
   const end = now.toISOString().slice(0, 10);
   const start = new Date(now.getTime() - 30 * 86400000)
     .toISOString()
@@ -34,7 +45,7 @@ export function selectOpenPrice(
       item.product_code?.padStart(14, "0") === barcode.padStart(14, "0") &&
       item.currency === "USD" &&
       item.location?.osm_address_country_code?.toUpperCase() === "US" &&
-      (!zip || item.location.osm_address_postcode?.slice(0, 5) === zip) &&
+      localityRank(item) < 2 &&
       typeof item.price === "number" &&
       Number.isFinite(item.price) &&
       item.price > 0 &&
@@ -47,7 +58,10 @@ export function selectOpenPrice(
       item.date <= end,
   );
   const best = valid.sort(
-    (a, b) => b.date!.localeCompare(a.date!) || a.price - b.price,
+    (a, b) =>
+      localityRank(a) - localityRank(b) ||
+      b.date!.localeCompare(a.date!) ||
+      a.price - b.price,
   )[0];
   return best
     ? {
@@ -57,6 +71,14 @@ export function selectOpenPrice(
         observedAt: best.date!,
         seller: best.location?.osm_name,
         country: "US",
+        locationMatch: requestedZip
+          ? localityRank(best) === 0
+            ? "zip"
+            : "state"
+          : "country",
+        state: stateForZip(best.location?.osm_address_postcode),
+        postalCode: postalZip(best.location?.osm_address_postcode),
+        requestedPostalCode: requestedZip,
         locality: [
           best.location?.osm_address_city,
           best.location?.osm_address_postcode,
@@ -74,7 +96,7 @@ export async function getOpenPricesForBarcode(
   if (!validBarcode(barcode)) return null;
   // Day in key prevents a cached observation from remaining fresh after the 30-day cutoff.
   return getOrSet(
-    `openprices:v3:${barcode}:${zip ?? "US"}:${new Date().toISOString().slice(0, 10)}`,
+    `openprices:v4:${barcode}:${zip ?? "US"}:${new Date().toISOString().slice(0, 10)}`,
     3600,
     async () => {
       await reserveBudget("openprices:minute", 30, 60000);

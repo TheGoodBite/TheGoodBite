@@ -265,11 +265,26 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
     expect(p.health.nutrition.protein100g).toBe(17);
     expect(p.health.source?.match).toBe("catalog");
     expect(p.market).toBe("US-catalog");
-    expect(p.estimatedPrice).toBeNull();
+    expect(p.estimatedPrice).toBe(2.99);
+    expect(p.priceObservation).toMatchObject({
+      locationMatch: "state", state: "MA", postalCode: "01752", requestedPostalCode: "01602",
+    });
     expect(p.imageUrl).toContain("images.openfoodfacts.org");
     expect(calls).toHaveLength(2);
   });
-  it.each(["foreign", "stale", "wrong-barcode", "wrong-ZIP"])(
+  it("preserves exact ZIP priority and fallback provenance through the route", async () => {
+    override = (url) => url.hostname === "prices.openfoodfacts.org"
+      ? Response.json({ items: [
+          { ...fixture.price, price: 1, date: new Date().toISOString().slice(0, 10) },
+          { ...fixture.price, id: 43, price: 4, date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
+            location: { ...fixture.price.location, osm_address_postcode: "01602" } },
+        ] }) : providers(url);
+    const product = (await json({ items: ["yogurt"], zipCode: "01602" })).items[0].options[0];
+    expect(product.estimatedPrice).toBe(4);
+    expect(product.priceObservation?.locationMatch).toBe("zip");
+    expect(calls).toHaveLength(2);
+  });
+  it.each(["foreign", "stale", "wrong-barcode", "other-state"])(
     "does not attach a %s receipt price",
     async (reason) => {
       override = (url) =>
@@ -291,7 +306,7 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
                     osm_address_country_code:
                       reason === "foreign" ? "FR" : "US",
                     osm_address_postcode:
-                      reason === "wrong-ZIP" ? "99999" : "01752",
+                      reason === "other-state" ? "90210" : "01752",
                   },
                 },
               ],

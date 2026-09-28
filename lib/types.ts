@@ -51,6 +51,10 @@ export type PriceObservation = {
   url?: string;
   country?: "US";
   locality?: string;
+  locationMatch?: "zip" | "state" | "country";
+  state?: string;
+  postalCode?: string;
+  requestedPostalCode?: string;
 };
 export type PackageInfo = {
   size?: string;

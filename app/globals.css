@@ -1399,3 +1399,43 @@ img {
   outline: 2px solid var(--ink, #111);
   outline-offset: 3px;
 }
+
+.price-location {
+  position: relative;
+  display: inline-block;
+}
+.price-location > small {
+  color: var(--muted, #70706c);
+  font-size: 0.75em;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.price-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: min(280px, 65vw);
+  z-index: 50;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #111;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+  box-shadow: 0 4px 18px #0002;
+}
+.price-location:hover .price-tooltip,
+.price-location:focus .price-tooltip,
+button:focus-visible .price-tooltip {
+  display: block;
+}
+.price-location:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 3px;
+}

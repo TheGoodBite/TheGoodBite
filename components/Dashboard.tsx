@@ -36,7 +36,7 @@ import { consumeSearch } from "@/lib/searchStream";
 import { normalizeQuery } from "@/lib/utils";
 import { MeezanyLogo } from "./MeezanyLogo";
 import { Sheet } from "./Sheet";
-import { ProductImage, ScoreBadge, priceLabel } from "./ProductPresentation";
+import { ProductImage, ProductPrice, ScoreBadge, priceLabel } from "./ProductPresentation";
 import { ProductDetail } from "./ProductDetail";
 
 const DIET_LABELS: Record<DietMode, string> = {
@@ -770,7 +770,7 @@ export default function Dashboard() {
                           <span className="error-text">{result.error}</span>
                         ) : best ? (
                           <>
-                            Best match · {priceLabel(best)}{" "}
+                            Best match · <ProductPrice product={best} />{" "}
                             <ScoreBadge product={best} />
                           </>
                         ) : result ? (
@@ -796,7 +796,7 @@ export default function Dashboard() {
                             aria-label={`View ${product.title}, ${priceLabel(product)}`}
                           >
                             <ProductImage product={product} />
-                            <span>{priceLabel(product)}</span>
+                            <ProductPrice product={product} />
                           </button>
                         ))}
                         <button
@@ -1288,7 +1288,7 @@ export default function Dashboard() {
                 </div>
                 <h3>{product.title}</h3>
                 <p>{product.packageSize || "Size unavailable"}</p>
-                <strong>{priceLabel(product)}</strong>
+                <strong><ProductPrice product={product} /></strong>
                 <p className="fine-print">
                   {product.provider.startsWith("mock")
                     ? "Demo example"

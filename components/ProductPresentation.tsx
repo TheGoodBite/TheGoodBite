@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ImageOff } from "lucide-react";
 import type { RankedProduct } from "@/lib/types";
 
@@ -52,4 +52,36 @@ export function priceLabel(product: RankedProduct) {
   return product.estimatedPrice === null
     ? "Price unknown"
     : `$${product.estimatedPrice.toFixed(2)}`;
+}
+
+export function priceLocationExplanation(product: RankedProduct) {
+  const price = product.priceObservation;
+  return price?.locationMatch === "state"
+    ? `Observed in ${price.locality || price.postalCode}, ${price.state}, on ${price.observedAt}. This price is from your state, not your exact ZIP (${price.requestedPostalCode}). Your local price may differ.`
+    : undefined;
+}
+
+export function ProductPrice({
+  product,
+  focusable = false,
+}: {
+  product: RankedProduct;
+  focusable?: boolean;
+}) {
+  const explanation = priceLocationExplanation(product);
+  const tooltipId = useId();
+  return explanation ? (
+    <span
+      className="price-location"
+      tabIndex={focusable ? 0 : undefined}
+      aria-describedby={tooltipId}
+    >
+      {priceLabel(product)} <small>{product.priceObservation?.state} price ⓘ</small>
+      <span className="price-tooltip" role="tooltip" id={tooltipId}>
+        {explanation}
+      </span>
+    </span>
+  ) : (
+    <span>{priceLabel(product)}</span>
+  );
 }

@@ -13,7 +13,12 @@ import {
 import type { Allergen, RankedProduct } from "@/lib/types";
 import { ALLERGEN_DETAILS, checkAllergens } from "@/lib/allergens";
 import { extractTags } from "@/lib/tags";
-import { ProductImage, ScoreBadge, priceLabel } from "./ProductPresentation";
+import {
+  ProductImage,
+  ProductPrice,
+  ScoreBadge,
+  priceLocationExplanation,
+} from "./ProductPresentation";
 
 export function ProductDetail({
   product,
@@ -82,7 +87,9 @@ export function ProductDetail({
       <h2>{product.title}</h2>
       <div className="price-line">
         <span>{product.packageSize || "Size unavailable"}</span>
-        <strong>{priceLabel(product)}</strong>
+        <strong>
+          <ProductPrice product={product} focusable />
+        </strong>
         {sellerUrl && (
           <a href={sellerUrl} target="_blank" rel="noreferrer">
             {primaryPrice?.seller || product.seller || "Price source"}
@@ -90,6 +97,9 @@ export function ProductDetail({
           </a>
         )}
       </div>
+      {priceLocationExplanation(product) && (
+        <p className="fine-print">{priceLocationExplanation(product)}</p>
+      )}
       <p className="fine-print">
         {primaryPrice?.source === "open_prices"
           ? `Observed ${primaryPrice.observedAt} · ${primaryPrice.locality || "United States"} · Open Prices`

@@ -20,9 +20,9 @@ Diet evaluation distinguishes match, conflict, and unknown. Preferences are eval
 
 ## Prices and provenance
 
-Open Prices is queried only for selected eligible products with validated exact barcodes. Observations must be within 30 days, in USD, at US locations, with matching ZIP when requested. Future, duplicate, discounted, and per-weight observations are rejected. Bulk candidates skip pricing to avoid substituting a single-unit receipt price for a case.
+Open Prices is queried only for selected eligible products with validated exact barcodes. Observations must be within 30 days, in USD, at US locations, preferring an exact ZIP when requested, then falling back to another known ZIP in the same state. Exact-ZIP observations take priority over newer or cheaper state observations. State matches carry the requested ZIP, observed ZIP, state, and match scope in their provenance; the UI labels them with a state price badge and explanatory tooltip. Other-state observations remain ineligible. A bundled GeoNames ZIP membership lookup avoids new runtime network calls; unknown ZIP memberships permit exact matches only. Future, duplicate, discounted, and per-weight observations are rejected. Bulk candidates skip pricing to avoid substituting a single-unit receipt price for a case.
 
-An eligible observation includes its source, date, locality, and link. Products without an eligible observation remain visible with nutrition and an unknown price. No Shopping estimates are substituted. Sparse price coverage, especially at an exact ZIP, is expected. These observations do not establish real-time inventory or shelf prices. Unit prices require supported denominators; price per serving requires an explicit serving count.
+An eligible observation includes its source, date, locality, and link. Products without an eligible observation remain visible with nutrition and an unknown price. No Shopping estimates are substituted. Sparse price coverage, even after the same-state fallback, is expected. These observations do not establish real-time inventory or shelf prices. Unit prices require supported denominators; price per serving requires an explicit serving count.
 
 ## Performance and cost control
 

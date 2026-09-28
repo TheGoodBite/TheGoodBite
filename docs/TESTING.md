@@ -20,7 +20,7 @@ The integration suite runs the real search route through request validation, ent
 - Catalog outages returning explained empty results with no Shopping fallback.
 - Allergy conflicts excluded before price lookups; preferences rank the catalog directly.
 - Open Prices failure retaining nutrition products with unknown prices.
-- Foreign, stale, wrong-barcode, and wrong-ZIP price observations rejected.
+- Foreign, stale, wrong-barcode, and other-state price observations rejected; same-state fallback and exact-ZIP priority preserved.
 - Repeated requests served from provider caches.
 - Authentication/validation rejection before provider calls.
 - Item budgets and production failure when shared Redis is unconfigured.

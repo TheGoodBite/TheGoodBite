@@ -20,6 +20,7 @@ import { checkAllergens } from "@/lib/allergens";
 import { evaluateFodmapFit } from "@/lib/fodmap";
 import { scoreDietFit } from "@/lib/dietModes";
 import { rankProducts } from "@/lib/scoring";
+import { stateForZip, postalZip } from "@/lib/zipState";
 import { buildShoppingQuery } from "@/lib/searchPreferences";
 import type { ProductCandidate } from "@/lib/types";
 const candidate = (
@@ -278,6 +279,34 @@ describe("Open Prices observations", () => {
       ),
     ).toBeNull(),
   );
+  it("falls back to another ZIP in the same state with explicit provenance", () => {
+    const result = selectOpenPrice([price], price.product_code!, "01602", now);
+    expect(result).toMatchObject({
+      amount: 3, locationMatch: "state", state: "MA",
+      postalCode: "01752", requestedPostalCode: "01602",
+    });
+  });
+  it("prefers an older exact-ZIP observation over a newer cheaper state observation", () => {
+    const exact = { ...price, id: 2, price: 5, date: "2026-09-20",
+      location: { ...price.location, osm_address_postcode: "01602-1234" } };
+    expect(selectOpenPrice([price, exact], price.product_code!, "01602", now))
+      .toMatchObject({ amount: 5, locationMatch: "zip", postalCode: "01602" });
+  });
+  it("uses recency then price within the state fallback", () => {
+    expect(selectOpenPrice([
+      { ...price, date: "2026-09-20", price: 1 },
+      { ...price, price: 4 }, price,
+    ], price.product_code!, "01602", now)?.amount).toBe(3);
+  });
+  it("does not broaden an unknown requested ZIP or missing observation postcode", () => {
+    expect(selectOpenPrice([price], price.product_code!, "99999", now)).toBeNull();
+    expect(selectOpenPrice([{ ...price, location: { osm_address_country_code: "US" } }],
+      price.product_code!, "01602", now)).toBeNull();
+  });
+  it("labels unlocalized US observations as country-level", () => {
+    expect(selectOpenPrice([price], price.product_code!, undefined, now)?.locationMatch)
+      .toBe("country");
+  });
   it("chooses newest valid observation rather than array order", () =>
     expect(
       selectOpenPrice(
@@ -287,4 +316,20 @@ describe("Open Prices observations", () => {
         now,
       )?.amount,
     ).toBe(3));
+});
+
+describe("ZIP state membership", () => {
+  it("resolves leading zeros and ZIP+4 without confusing neighboring states", () => {
+    expect(stateForZip("01602")).toBe("MA");
+    expect(stateForZip("01752-1234")).toBe("MA");
+    expect(stateForZip("02860")).toBe("RI");
+    expect(stateForZip("06390")).toBe("NY"); // Fishers Island exception
+    expect(stateForZip("90210")).toBe("CA");
+    expect(stateForZip("20001")).toBe("DC");
+  });
+  it("rejects missing, malformed, or unassigned postcodes rather than guessing", () => {
+    for (const zip of [undefined, "00000", "99999", "01602foo", "1602", "01602-12"])
+      expect(stateForZip(zip)).toBeUndefined();
+    expect(postalZip(" 01602-1234 ")).toBe("01602");
+  });
 });
