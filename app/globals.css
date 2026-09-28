@@ -1223,7 +1223,7 @@ img {
   .grocery-pane {
     max-width: 950px;
     width: 100%;
-    margin: auto;
+    margin: 0 auto;
   }
   .product-thumb {
     width: 76px;
