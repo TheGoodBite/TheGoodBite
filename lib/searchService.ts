@@ -17,7 +17,7 @@ export async function searchItem(
   signal.throwIfAborted();
   let catalog: Awaited<ReturnType<typeof discoverNutritionProducts>>;
   try {
-    catalog = await discoverNutritionProducts(query, signal);
+    catalog = await discoverNutritionProducts(query, signal, preferences);
   } catch {
     signal.throwIfAborted();
     return {
@@ -35,7 +35,7 @@ export async function searchItem(
       options: [],
       emptyReason: "nutrition_missing",
       warnings: [
-        "No relevant US-market products with nutrition facts were found.",
+        "Open Food Facts returned no US-market products with nutrition facts matching this search and its filters.",
       ],
     };
   const warnings = new Set<string>();
@@ -55,7 +55,7 @@ export async function searchItem(
   const excludedCount = catalog.candidates.length - eligible.length;
   if (excludedCount)
     warnings.add(
-      `${excludedCount} catalog option${excludedCount === 1 ? "" : "s"} excluded for relevance, preference conflicts, or missing mandatory evidence.`,
+      `${excludedCount} catalog option${excludedCount === 1 ? "" : "s"} excluded by Open Food Facts preference evidence or the FODMAP screen.`,
     );
   const selected = eligible.slice(
     0,

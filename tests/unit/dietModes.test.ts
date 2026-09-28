@@ -108,45 +108,45 @@ describe("scoreDietFit", () => {
   });
 
   describe("vegetarian", () => {
-    it("penalizes beef in ingredients", () => {
-      const h = makeHealth({ ingredientsText: "beef, water, salt" });
+    it("uses OFF vegetarian conflict evidence", () => {
+      const h = makeHealth({ attributes: { vegetarian: { status: "known", match: 0 } } });
       const result = scoreDietFit(h, ["vegetarian"]);
       expect(result.score).toBe(0);
-      expect(result.warnings).toContain("Likely not vegetarian");
+      expect(result.evidence?.vegetarian).toBe("conflict");
     });
 
-    it("passes for products without animal terms", () => {
+    it("keeps unanalysed ingredients unknown", () => {
       const h = makeHealth({ ingredientsText: "oats, sugar, cinnamon" });
       const result = scoreDietFit(h, ["vegetarian"]);
-      expect(result.score).toBeGreaterThan(0);
+      expect(result.evidence?.vegetarian).toBe("unknown");
     });
   });
 
   describe("vegan", () => {
-    it("penalizes egg in ingredients", () => {
-      const h = makeHealth({ ingredientsText: "flour, egg, sugar" });
+    it("uses OFF vegan conflict evidence", () => {
+      const h = makeHealth({ attributes: { vegan: { status: "known", match: 0 } } });
       const result = scoreDietFit(h, ["vegan"]);
       expect(result.score).toBe(0);
-      expect(result.warnings).toContain("Likely not vegan");
+      expect(result.evidence?.vegan).toBe("conflict");
     });
 
-    it("rewards explicit vegan labels", () => {
-      const h = makeHealth({ labelsTags: ["en:vegan"] });
+    it("uses OFF vegan matches without reinterpreting the title", () => {
+      const h = makeHealth({ attributes: { vegan: { status: "known", match: 100 } } });
       const result = scoreDietFit(h, ["vegan"]);
       expect(result.score).toBe(100);
     });
   });
 
   describe("gluten_free", () => {
-    it("penalizes wheat in ingredients", () => {
-      const h = makeHealth({ ingredientsText: "enriched wheat flour, salt" });
+    it("uses OFF gluten conflict evidence", () => {
+      const h = makeHealth({ attributes: { allergens_no_gluten: { status: "known", match: 0 } } });
       const result = scoreDietFit(h, ["gluten_free"]);
       expect(result.score).toBe(0);
-      expect(result.warnings).toContain("Likely contains gluten");
+      expect(result.evidence?.gluten_free).toBe("conflict");
     });
 
-    it("rewards gluten-free label", () => {
-      const h = makeHealth({ labelsTags: ["en:gluten-free"] });
+    it("uses OFF gluten matches", () => {
+      const h = makeHealth({ attributes: { allergens_no_gluten: { status: "known", match: 100 } } });
       const result = scoreDietFit(h, ["gluten_free"]);
       expect(result.score).toBe(100);
     });

@@ -28,9 +28,9 @@ describe("product attribute importance", () => {
   it("requires full absence evidence for allergens; traces never meet mandatory", () => {
     expect(evaluateProductPreferences(health({ allergens_no_milk: { status: "known", match: 20 } }), { allergens_no_milk: "mandatory" }).failedMandatory).toHaveLength(1);
   });
-  it("mandatory quality admits A/B-level matches but not middling evidence", () => {
+  it("uses OFF match-status boundaries rather than attribute-specific thresholds", () => {
     expect(evaluateProductPreferences(health({ nutriscore: { status: "known", match: 80 } }), { nutriscore: "mandatory" }).failedMandatory).toEqual([]);
-    expect(evaluateProductPreferences(health({ nutriscore: { status: "known", match: 60 } }), { nutriscore: "mandatory" }).failedMandatory).toHaveLength(1);
+    expect(evaluateProductPreferences(health({ nutriscore: { status: "known", match: 50 } }), { nutriscore: "mandatory" }).failedMandatory).toHaveLength(1);
   });
   it("ignores not-important and not-applicable attributes", () => {
     expect(evaluateProductPreferences(health({ nutriscore: { status: "not-applicable" } }), { nutriscore: "mandatory", nova: "not_important" }).active).toBe(false);
@@ -52,19 +52,16 @@ describe("product attribute importance", () => {
 });
 
 describe("unwanted ingredients", () => {
-  it("rejects named ingredients and plurals without substring false positives", () => {
-    const h: HealthInfo = { ...UNKNOWN_HEALTH, ingredientsText: "Garlic, onions, salt", ingredientsTags: ["en:garlic", "en:onion", "en:salt"] };
-    expect(evaluateProductPreferences(h, { unwanted_ingredients: "mandatory" }, ["onion"]).failedMandatory).toHaveLength(1);
-    expect(evaluateProductPreferences(h, { unwanted_ingredients: "mandatory" }, ["lic"]).failedMandatory).toEqual([]);
+  it("uses OFF's parameterized attribute rather than scanning ingredient names", () => {
+    const h: HealthInfo = { ...UNKNOWN_HEALTH, ingredientsText: "Garlic, onions, salt",
+      attributes: { unwanted_ingredients: { status: "known", match: 100 } } };
+    expect(evaluateProductPreferences(h, { unwanted_ingredients: "mandatory" }).failedMandatory).toEqual([]);
+    h.attributes!.unwanted_ingredients!.match = 0;
+    expect(evaluateProductPreferences(h, { unwanted_ingredients: "mandatory" }).failedMandatory).toHaveLength(1);
   });
-  it("requires ingredient analysis and configured terms before claiming absence", () => {
-    for (const h of [UNKNOWN_HEALTH, { ...UNKNOWN_HEALTH, ingredientsText: "Water" }])
-      expect(evaluateProductPreferences(h, { unwanted_ingredients: "mandatory" }, ["garlic"]).unknown).toHaveLength(1);
-    expect(evaluateProductPreferences({ ...UNKNOWN_HEALTH, ingredientsTags: ["en:water"] }, { unwanted_ingredients: "mandatory" }, []).unknown).toHaveLength(1);
-  });
-  it("recognizes canonical ingredient tags when the text is missing", () => {
-    const h = { ...UNKNOWN_HEALTH, ingredientsTags: ["en:palm-oil"] };
-    expect(evaluateProductPreferences(h, { unwanted_ingredients: "mandatory" }, ["palm oil"]).failedMandatory).toHaveLength(1);
+  it("does not infer absence from ingredient text when OFF evidence is missing", () => {
+    const h = { ...UNKNOWN_HEALTH, ingredientsText: "Water", ingredientsTags: ["en:water"] };
+    expect(evaluateProductPreferences(h, { unwanted_ingredients: "mandatory" }).unknown).toHaveLength(1);
   });
 });
 

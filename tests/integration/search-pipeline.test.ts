@@ -117,10 +117,13 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
       calls.filter((url) => url.hostname === "prices.openfoodfacts.org"),
     ).toHaveLength(1);
   });
-  it("does not suggest plain yogurt for an explicit vanilla query", async () => {
+  it("sends the complete text query to OFF without a second local title filter", async () => {
+    override = url => url.hostname === "world.openfoodfacts.org"
+      ? Response.json({ products: [] }) : providers(url);
     const row = (await json({ items: ["vanilla yogurt"] })).items[0];
     expect(row.options).toEqual([]);
     expect(row.emptyReason).toBe("nutrition_missing");
+    expect(calls[0].searchParams.get("search_terms")).toBe("vanilla yogurt");
     expect(
       calls.some((url) => url.hostname === "prices.openfoodfacts.org"),
     ).toBe(false);
@@ -139,10 +142,57 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
     const row = (await json({ items: ["yogurt"], allergies: ["dairy"] }))
       .items[0];
     expect(row.options).toEqual([]);
-    expect(row.warnings?.join(" ")).toContain("preference conflicts");
+    expect(row.warnings?.join(" ")).toContain("Open Food Facts preference evidence");
     expect(
       calls.some((url) => url.hostname === "prices.openfoodfacts.org"),
     ).toBe(false);
+  });
+  it("retrieves dairy-free yogurt with provider filters and does not reject its name", async () => {
+    override = url => url.hostname === "world.openfoodfacts.org"
+      ? Response.json({ products: [{ ...fixture.catalog.products[0],
+          product_name: "Coconut milk yogurt", ingredients_text: "Coconut milk, cultures",
+          allergens_tags: [],
+          attribute_groups_en: [{ attributes: [{ id: "allergens_no_milk", status: "known", match: 100 }] }],
+        }] }) : providers(url);
+    const row = (await json({ items: ["yogurt"], productPreferences: { allergens_no_milk: "mandatory" },
+      dietModes: ["high_protein"] })).items[0];
+    expect(row.options).toHaveLength(1);
+    expect(row.excludedCount).toBe(0);
+    expect(row.options[0].title).toBe("Acme Coconut milk yogurt");
+    expect(row.options[0].allergyStatus).toBe("not_detected");
+    expect(calls[0].searchParams.get("tagtype_1")).toBe("allergens");
+    expect(calls[0].searchParams.get("tag_contains_1")).toBe("does_not_contain");
+    expect(calls[0].searchParams.get("tag_1")).toBe("en:milk");
+    expect(calls[0].searchParams.get("tagtype_2")).toBe("traces");
+    expect(calls[0].searchParams.get("tag_2")).toBe("en:milk");
+    expect(calls[0].searchParams.get("api_version")).toBe("3.4");
+  });
+  it("trusts OFF text matching when the product name uses a different category term", async () => {
+    override = url => url.hostname === "world.openfoodfacts.org"
+      ? Response.json({ products: [{ ...fixture.catalog.products[0], product_name: "Vanilla cultured coconut" }] })
+      : providers(url);
+    expect((await json({ items: ["yogurt"] })).items[0].options).toHaveLength(1);
+  });
+  it("isolates restricted searches from unrestricted and parameterized ingredient caches", async () => {
+    await json({ items: ["yogurt"] });
+    await json({ items: ["yogurt"], allergies: ["dairy"] });
+    await json({ items: ["yogurt"], unwantedIngredients: ["onion"], productPreferences: { unwanted_ingredients: "important" } });
+    await json({ items: ["yogurt"], unwantedIngredients: ["garlic"], productPreferences: { unwanted_ingredients: "important" } });
+    expect(calls.filter(url => url.hostname === "world.openfoodfacts.org")).toHaveLength(4);
+    const count = calls.length;
+    await json({ items: ["yogurt"], productPreferences: { allergens_no_milk: "mandatory" } });
+    expect(calls).toHaveLength(count);
+  });
+  it("keeps FODMAP as a local screen before pricing", async () => {
+    override = url => url.hostname === "world.openfoodfacts.org"
+      ? Response.json({ products: [{ ...fixture.catalog.products[0],
+          product_name: "Garlic yogurt", ingredients_text: "Garlic, cultures",
+        }] }) : providers(url);
+    const row = (await json({ items: ["yogurt"], dietModes: ["fodmap"] })).items[0];
+    expect(row.options).toEqual([]);
+    expect(row.excludedCount).toBe(1);
+    expect(row.warnings?.join(" ")).toContain("FODMAP");
+    expect(calls).toHaveLength(1);
   });
   it("keeps nutrition when the price service fails", async () => {
     override = (url) =>
@@ -230,6 +280,7 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
                 ...base,
                 product_name: "Chicken Sausage",
                 ingredients_text: "Chicken, salt, spices",
+                attribute_groups_en: [{ attributes: [{ id: "allergens_no_milk", status: "known", match: 100 }] }],
                 allergens_tags: [],
                 image_front_url: "https://images.openfoodfacts.org/fixture.jpg",
               },
@@ -239,6 +290,7 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
                 product_name: "Cheese Sausage",
                 ingredients_text: "Pork, milk",
                 allergens_tags: ["en:milk"],
+                attribute_groups_en: [{ attributes: [{ id: "allergens_no_milk", status: "known", match: 0 }] }],
               },
               {
                 ...base,
@@ -318,13 +370,13 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
     override = () => new Response("offline", { status: 503 });
     const row = (await json({ items: ["yogurt"], productPreferences: { low_fat: "mandatory" } })).items[0];
     expect(row.options).toEqual([]);
-    expect(row.warnings?.join(" ")).toContain("mandatory evidence");
+    expect(row.emptyReason).toBe("nutrition_unavailable");
     expect(calls).toHaveLength(1);
   });
   it("does not spend price calls when all mandatory evidence is missing", async () => {
     const row = (await json({ items: ["yogurt"], productPreferences: { forest_footprint: "mandatory" } })).items[0];
     expect(row.options).toEqual([]);
-    expect(row.warnings?.join(" ")).toContain("mandatory evidence");
+    expect(row.warnings?.join(" ")).toContain("Open Food Facts preference evidence");
     expect(calls).toHaveLength(1);
   });
   it.each([

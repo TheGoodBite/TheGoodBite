@@ -185,10 +185,10 @@ describe("nutrition identity and evidence", () => {
         "dairy",
       ]),
     ).toEqual([]));
-  it("does not let free claims override contrary ingredient evidence", () =>
+  it("does not let title claims override provider allergen tags", () =>
     expect(
       checkAllergens(
-        { ...UNKNOWN_HEALTH, ingredientsText: "milk powder" },
+        { ...UNKNOWN_HEALTH, allergensTags: ["en:milk"] },
         "Dairy-free snack",
         ["dairy"],
       ),

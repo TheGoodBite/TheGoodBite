@@ -6,15 +6,16 @@ import {
   validBarcode,
   words,
 } from "@/lib/products";
-import { scoreRelevance } from "@/lib/scoring";
+import type { CatalogPreferences } from "@/lib/offSearchFilters";
 import type { HealthInfo, ProductCandidate } from "@/lib/types";
 
 export async function discoverNutritionProducts(
   query: string,
   signal: AbortSignal,
+  preferences: CatalogPreferences = {},
 ) {
   signal.throwIfAborted();
-  const products = await searchCatalog(query);
+  const products = await searchCatalog(query, preferences);
   signal.throwIfAborted();
   const healthById = new Map<string, HealthInfo>();
   const candidates: ProductCandidate[] = [];
@@ -52,8 +53,6 @@ export async function discoverNutritionProducts(
       ),
       offers: [],
     };
-    // Search endpoints can return noise, so a country tag alone is insufficient.
-    if (scoreRelevance(query, candidate) < 100) continue;
     candidates.push(candidate);
     healthById.set(barcode, health);
   }

@@ -30,9 +30,10 @@ describe("checkAllergens", () => {
     expect(matched).toContain("dairy");
   });
 
-  it("matches tree nuts from title keywords", () => {
+  it("uses provider tags rather than title keywords", () => {
     const health: HealthInfo = { ...baseHealth, allergensTags: [] };
     const matched = checkAllergens(health, "Roasted Almonds & Cashews", ["tree_nuts"]);
-    expect(matched).toContain("tree_nuts");
+    expect(matched).toEqual([]);
+    expect(checkAllergens({ ...health, allergensTags: ["en:nuts"] }, "Snack", ["tree_nuts"])).toContain("tree_nuts");
   });
 });

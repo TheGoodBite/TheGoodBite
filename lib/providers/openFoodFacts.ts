@@ -1,4 +1,5 @@
-import { getJson, getOrSet } from "@/lib/cache";
+import { offSearchParameters, type CatalogPreferences } from "@/lib/offSearchFilters";
+import { getOrSet } from "@/lib/cache";
 import { classifyHealth, UNKNOWN_HEALTH } from "@/lib/health";
 import type { HealthInfo, ProductCandidate, ProductPreferenceId, ProductAttribute } from "@/lib/types";
 import { PRODUCT_PREFERENCE_IDS } from "@/lib/types";
@@ -188,10 +189,11 @@ async function getByBarcode(code: string) {
     },
   );
 }
-export async function searchCatalog(query: string) {
-  const queryHash = await sha256(normalizeQuery(query));
+export async function searchCatalog(query: string, preferences: CatalogPreferences = {}) {
+  const filters = offSearchParameters(preferences);
+  const queryHash = await sha256(JSON.stringify([normalizeQuery(query), filters.toString()]));
   return getOrSet<OffProduct[]>(
-    `off:v5:us-search:${queryHash}`,
+    `off:v6:us-search:${queryHash}`,
     86400,
     async () => {
       await reserveBudget("off:search", 10, 60000);
@@ -199,6 +201,8 @@ export async function searchCatalog(query: string) {
       for (const [key, value] of Object.entries({
         search_terms: query,
         search_simple: "1",
+        api_version: "3.4",
+        lc: "en",
         action: "process",
         json: "1",
         page_size: "50",
@@ -208,6 +212,7 @@ export async function searchCatalog(query: string) {
         fields: FIELDS,
       }))
         url.searchParams.set(key, value);
+      for (const [key, value] of filters) url.searchParams.set(key, value);
       const data = await providerJson<{ products?: OffProduct[] }>(
         url,
         "Nutrition search",
@@ -216,11 +221,7 @@ export async function searchCatalog(query: string) {
         p.countries_tags?.includes("en:united-states"),
       );
     },
-  ).catch(async (error) => {
-    const previous = await getJson<{ value: OffProduct[] }>(`v2:off:v4:us-search:${queryHash}`);
-    if (previous?.value?.length) return previous.value;
-    throw error;
-  });
+  );
 }
 export async function enrichProducts(
   candidates: ProductCandidate[],

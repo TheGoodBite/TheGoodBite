@@ -1,5 +1,5 @@
 import { evaluateProductPreferences } from "@/lib/productPreferences";
-import { checkAllergens } from "@/lib/allergens";
+import { restoreProductPreferences } from "@/lib/preferenceStorage";
 import { scoreDietFit } from "@/lib/dietModes";
 import { scoreHealth } from "@/lib/health";
 import type {
@@ -25,6 +25,7 @@ export function rankProducts(input: {
   limit: number;
   bulkPreference?: "everyday" | "bulk" | "any";
 }) {
+  const { preferences } = restoreProductPreferences(input);
   const prepared = input.candidates
     .map((candidate) => {
       const health = input.healthById.get(candidate.providerProductId);
@@ -32,25 +33,14 @@ export function rankProducts(input: {
       return {
         candidate,
         health,
-        preferenceFit: evaluateProductPreferences(health, input.productPreferences, input.unwantedIngredients),
+        preferenceFit: evaluateProductPreferences(health, preferences),
         dietFit: scoreDietFit(health, input.dietModes, candidate.title),
-        allergens: checkAllergens(
-          health,
-          candidate.title,
-          input.allergies ?? [],
-        ),
       };
     })
     .filter(
-      ({ dietFit, allergens, candidate, preferenceFit }) =>
-        !allergens.length &&
+      ({ dietFit, preferenceFit }) =>
         !preferenceFit.failedMandatory.length &&
-        scoreRelevance(input.query, candidate) >= 50 &&
-        !input.dietModes.some(
-          (mode) =>
-            ["vegan", "vegetarian", "gluten_free", "fodmap"].includes(mode) &&
-            dietFit.evidence?.[mode] === "conflict",
-        ),
+        !(input.dietModes.includes("fodmap") && dietFit.evidence?.fodmap === "conflict"),
     );
   return prepared
     .map(({ candidate, health, dietFit, preferenceFit }): RankedProduct => {
@@ -102,8 +92,11 @@ export function rankProducts(input: {
         (healthKnown ? (clamp(healthScore, 0, 60) / 60) * 25 : 0) +
         history -
         bulkPenalty;
-      const allergyStatus = input.allergies?.length
-        ? health.ingredientsText
+      const allergenAttributes = Object.keys(preferences).filter(id =>
+        id.startsWith("allergens_no_") && preferences[id as keyof ProductPreferences] !== "not_important");
+      const allergyStatus = allergenAttributes.length
+        ? allergenAttributes.every(id => health.attributes?.[id as keyof ProductPreferences]?.status === "known" &&
+            health.attributes?.[id as keyof ProductPreferences]?.match === 100)
           ? ("not_detected" as const)
           : ("unknown" as const)
         : undefined;

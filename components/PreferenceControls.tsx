@@ -11,7 +11,7 @@ export function PreferenceControls({ value, onChange, unwantedIngredients, onUnw
   onUnwantedChange: (text: string) => void;
 }) {
   return <div className="product-preferences">
-    <p className="fine-print">Important affects ranking. Very important has twice the weight. Mandatory hides products with missing or insufficient evidence.</p>
+    <p className="fine-print">Important affects ranking. Very important has twice the weight. Mandatory applies Open Food Facts filters and requires matching Open Food Facts evidence.</p>
     {PREFERENCE_GROUPS.map(group => <section key={group.id}>
       <h3>{group.label}</h3>
       {group.id === "allergens" && <p className="fine-print">For an allergy, choose Mandatory. Allergen data may be missing, incomplete, incorrect, or out of date. Always check the actual packaging.</p>}
@@ -28,7 +28,7 @@ export function PreferenceControls({ value, onChange, unwantedIngredients, onUnw
           <label className="field-label" htmlFor="unwanted-ingredients">Ingredients you cannot or do not want to eat</label>
           <textarea id="unwanted-ingredients" className="text-input" rows={2} maxLength={1600}
             placeholder="e.g. garlic, onion, gelatin" value={unwantedIngredients} onChange={e => onUnwantedChange(e.target.value)} />
-          <p className="fine-print">Separate ingredients with commas. Matches use ingredient names in the available data; synonyms and translations may be missed.</p>
+          <p className="fine-print">Separate ingredients with commas. Ingredient matching uses Open Food Facts ingredient tags and analysis.</p>
         </>}
       </div>)}
       {group.id === "labels" && <p className="fine-print">Organic farming supports ecological sustainability and biodiversity. Fair trade supports producers in developing countries.</p>}

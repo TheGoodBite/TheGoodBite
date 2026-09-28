@@ -1,4 +1,3 @@
-import { containsTerm, withoutFreeClaims } from "@/lib/foodEvidence";
 import { evaluateFodmapFit } from "@/lib/fodmap";
 import {
   DIET_MODES,
@@ -51,9 +50,6 @@ export function scoreDietFit(
 
 function scoreOneMode(health: HealthInfo, mode: DietMode, title: string) {
   const n = health.nutrition;
-  const text = [health.ingredientsText, health.labelsTags.join(" ")]
-    .join(" ")
-    .toLowerCase();
   const warnings: string[] = [];
   const required: Partial<Record<DietMode, (keyof HealthInfo["nutrition"])[]>> =
     {
@@ -142,77 +138,18 @@ function scoreOneMode(health: HealthInfo, mode: DietMode, title: string) {
     if (!match) warnings.push("Less kid-friendly nutrition");
   }
 
-  if (mode === "vegetarian" || mode === "vegan") {
-    const animalTerms =
-      mode === "vegan"
-        ? [
-            "beef",
-            "chicken",
-            "pork",
-            "fish",
-            "gelatin",
-            "milk",
-            "cheese",
-            "egg",
-            "honey",
-            "whey",
-            "casein",
-          ]
-        : ["beef", "chicken", "pork", "fish", "gelatin"];
-    const ingredientEvidence = (health.ingredientsText ?? "").replace(
-      /\b(?:almond|oat|soy|rice|coconut|cashew)[ -]milk\b|\b(?:peanut|almond|cocoa|shea)[ -]butter\b/gi,
-      " ",
-    );
-    const titleEvidence =
-      /\b(?:vegan|vegetarian|plant[- ]based|meatless)\b/i.test(title)
-        ? ""
-        : title;
-    const hasAnimalTerm = animalTerms.some((term) =>
-      containsTerm(
-        withoutFreeClaims(
-          [ingredientEvidence, titleEvidence].join(" "),
-          animalTerms,
-        ),
-        term,
-      ),
-    );
-    const hasPositiveLabel = health.labelsTags.some(
-      (label) => label.replace(/^en:/, "") === mode,
-    );
-    score = hasAnimalTerm ? 0 : hasPositiveLabel ? 100 : 65;
-    match = !hasAnimalTerm && hasPositiveLabel;
-    if (hasAnimalTerm)
-      warnings.push(
-        mode === "vegan" ? "Likely not vegan" : "Likely not vegetarian",
-      );
+  if (["vegan", "vegetarian", "gluten_free"].includes(mode)) {
+    const id = mode === "gluten_free" ? "allergens_no_gluten" : mode;
+    const attribute = health.attributes?.[id as "vegan" | "vegetarian" | "allergens_no_gluten"];
+    const known = attribute?.status === "known" && typeof attribute.match === "number" &&
+      Number.isFinite(attribute.match) && attribute.match >= 0 && attribute.match <= 100;
+    const status: EvidenceState = !known ? "unknown" : attribute.match! > 50 ? "match" : "conflict";
+    return { mode, score: known ? attribute.match! : 45, match: status === "match", status,
+      warnings: status === "unknown" ? ["Open Food Facts evidence missing for " + mode.replaceAll("_", " ")]
+        : status === "conflict" ? [attribute?.title ?? "Open Food Facts reports a preference conflict"] : [] };
   }
 
-  if (mode === "gluten_free") {
-    const glutenTerms = ["wheat", "barley", "rye", "malt", "gluten"];
-    const hasGluten = glutenTerms.some((term) =>
-      containsTerm(
-        withoutFreeClaims(health.ingredientsText ?? "", ["gluten"]),
-        term,
-      ),
-    );
-    const hasLabel = health.labelsTags.some(
-      (label) => label.replace(/^en:/, "") === "gluten-free",
-    );
-    score = hasGluten && !hasLabel ? 0 : hasLabel ? 100 : 60;
-    match = hasLabel;
-    if (hasGluten && !hasLabel) warnings.push("Likely contains gluten");
-  }
-
-  const categorical = ["vegan", "vegetarian", "gluten_free"].includes(mode);
-  const status: EvidenceState = match
-    ? "match"
-    : categorical && !warnings.length
-      ? "unknown"
-      : "conflict";
-  if (status === "unknown") {
-    score = 45;
-    warnings.push("Not enough evidence to verify " + mode.replaceAll("_", " "));
-  }
+  const status: EvidenceState = match ? "match" : "conflict";
   return { mode, score, match, warnings, status };
 }
 
