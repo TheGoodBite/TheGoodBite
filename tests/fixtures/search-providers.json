@@ -1,0 +1,79 @@
+{
+  "_description": "Synthetic provider-contract fixtures. Not real product advice, receipts, or live credentials.",
+  "shopping": {
+    "shopping_results": [
+      {
+        "product_id": "plain-a",
+        "title": "Acme Plain Yogurt 6 oz",
+        "source": "Fixture Store A",
+        "price": "$4.49",
+        "extracted_price": 4.49
+      },
+      {
+        "product_id": "plain-b",
+        "title": "Acme Plain Yogurt 6 oz",
+        "source": "Fixture Store B",
+        "price": "$3.49",
+        "extracted_price": 3.49
+      },
+      {
+        "product_id": "vanilla",
+        "title": "Acme Vanilla Yogurt 6 oz",
+        "source": "Fixture Store C",
+        "price": "$2.49",
+        "extracted_price": 2.49
+      },
+      {
+        "product_id": "foreign",
+        "title": "Acme Plain Yogurt 6 oz",
+        "currency": "GBP",
+        "price": "£1.99",
+        "extracted_price": 1.99
+      }
+    ]
+  },
+  "catalog": {
+    "products": [
+      {
+        "code": "012345678905",
+        "product_name": "Plain Yogurt",
+        "brands": "Acme",
+        "quantity": "6 oz",
+        "countries_tags": ["en:united-states"],
+        "nutriscore_grade": "a",
+        "nova_group": 1,
+        "nutriments": {
+          "energy-kcal_100g": 90,
+          "proteins_100g": 17,
+          "sugars_100g": 0,
+          "carbohydrates_100g": 5,
+          "sodium_100g": 0.04,
+          "proteins": 999
+        },
+        "ingredients_text": "Milk, live cultures",
+        "allergens_tags": ["en:milk"],
+        "labels_tags": [],
+        "categories_tags": []
+      }
+    ]
+  },
+  "location": [
+    {
+      "canonical_name": "01752,Marlborough,Massachusetts,United States",
+      "country_code": "US"
+    }
+  ],
+  "price": {
+    "id": 42,
+    "product_code": "012345678905",
+    "price": 2.99,
+    "currency": "USD",
+    "price_per": "UNIT",
+    "location": {
+      "osm_name": "Fixture Receipt Store",
+      "osm_address_city": "Marlborough",
+      "osm_address_postcode": "01752",
+      "osm_address_country_code": "US"
+    }
+  }
+}

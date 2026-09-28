@@ -9,7 +9,10 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest run",
-    "test:watch": "VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest"
+    "test:watch": "VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest",
+    "test:unit": "VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest run tests/unit",
+    "test:integration": "VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest run tests/integration --exclude '**/*-live.test.ts'",
+    "test:live": "MEEZANY_LIVE_TESTS=1 VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest run tests/integration/providers-live.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.80.0",

@@ -114,6 +114,8 @@ Supabase tables: `profiles`, `grocery_lists`, `grocery_list_items`, `bought_prod
 
 Redis caches provider/nutrition lookups. Ranking runs deterministically at request time. No recipe endpoint is implemented.
 
+See [Testing](docs/TESTING.md) for offline integration tests, CI, optional live checks, and database verification.
+
 ## Verification And Next Work
 
 ```sh
