@@ -53,8 +53,8 @@ Later, people can share recipe photos with ingredient lists that others can add 
 
 - Next.js web dashboard with list editing, quick lookup, optional ZIP, ranked options, and expanded product details.
 - Google OAuth and email magic links via Supabase.
-- US-localized SerpAPI Google Shopping search; missing credentials return an explicit error, never fake products.
-- Open Food Facts enrichment, deterministic health/diet ranking, tags, allergen checks, and beta FODMAP signals.
+- Open Food Facts product discovery restricted to US-market catalog records with nutrition facts.
+- Exact-barcode Open Prices observations, deterministic health/diet ranking, tags, allergen checks, and beta FODMAP signals. Shopping search is no longer used.
 - Supabase saved-list and bought-product APIs; Stripe checkout/webhook scaffolding.
 - Shared Upstash Redis caching and rolling request/provider budgets; Redis is required for production search.
 
@@ -75,11 +75,11 @@ Exact location/store pricing remains later work, not a requirement for useful di
 
 ## Stack And Data Flow
 
-Next.js App Router, React, TypeScript, Tailwind CSS, Node.js route handlers, Supabase Auth/Postgres, Stripe, Upstash Redis, SerpAPI, and Open Food Facts. Deploy to a compatible Next.js host such as Vercel. No native app or separate backend service is required.
+Next.js App Router, React, TypeScript, Tailwind CSS, Node.js route handlers, Supabase Auth/Postgres, Stripe, Upstash Redis, Open Food Facts, and Open Prices. The app is hosted on Netlify. No native app or separate backend service is required.
 
-`POST /api/search-products` authenticates the bearer token, resolves entitlements, normalizes queries, checks usage, and searches at most four items concurrently, streaming completed items to the UI. Shopping results are normalized, deduplicated, enriched with Open Food Facts, and ranked. Failed items return their own error; missing health information stays unknown.
+`POST /api/search-products` authenticates the bearer token, resolves entitlements, normalizes queries, checks usage, and searches at most four items concurrently, streaming completed items to the UI. Open Food Facts records are validated, deduplicated, and filtered by nutrition evidence, relevance, and preferences. Eligible products receive bounded Open Prices lookups before final ranking. Failed items return their own error; products without nutrition facts are hidden.
 
-Optional ZIP resolves to a canonical US search location; it does not confirm store inventory or shelf prices. Label prices as estimates. Shopping results usually lack UPCs, so title matching needs confidence checks. Open Food Facts coverage is incomplete. Exact-barcode Open Prices observations are preferred only when recent, USD, US, and ZIP-matched when a ZIP is supplied; otherwise Shopping estimates remain.
+Open Food Facts country tags restrict discovery to products marked as sold in the US; they do not confirm local inventory or country of manufacture. Optional ZIP filters Open Prices observations. A price is shown only for an exact barcode with a recent USD observation at a US location, ZIP-matched when supplied. Otherwise it stays unknown. Catalog and price coverage are incomplete; no Shopping fallback is used.
 
 `overallScore` blends relevance, price, nutrition, and preferences: label it Match score. See `lib/scoring.ts`, `lib/health.ts`, and `lib/dietModes.ts` for the actual algorithm. Design-example numbers are not scoring specifications.
 
@@ -91,11 +91,11 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Use `.env.example` as the authoritative variable list. Configure the site URL, public Supabase URL/anon key, server-only Supabase service-role key, SerpAPI key, Upstash credentials, and Stripe keys/price IDs as needed. Never expose service-role or provider secrets in the browser.
+Use `.env.example` as the authoritative variable list. Configure the site URL, public Supabase URL/anon key, server-only Supabase service-role key, Upstash credentials, and Stripe keys/price IDs as needed. Never expose service-role or provider secrets in the browser.
 
 For a fresh database, apply all files in `supabase/migrations/` in order. Existing databases need only unapplied migrations. Enable Google/email auth in Supabase, configure the Google provider, and allow the app origin as a redirect. For billing, connect a test Stripe webhook to `/api/stripe/webhook`.
 
-Without SerpAPI, search returns a configuration error. Production search requires Redis and fails closed if its budget service is unavailable. Development without Redis uses a bounded local budget; it does not provide cross-process enforcement. Provider cache read failures may fall back to a fresh lookup only if its budget reservation succeeds.
+Open Food Facts and Open Prices require no paid Shopping API key. Production search requires Redis and fails closed if its budget service is unavailable. Development without Redis uses a bounded local budget; it does not provide cross-process enforcement. Provider cache read failures may fall back to a fresh lookup only if its budget reservation succeeds.
 
 ## APIs And Persistence
 

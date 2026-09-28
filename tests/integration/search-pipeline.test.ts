@@ -2,9 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fixture from "../fixtures/search-providers.json";
 import type { SearchEvent, SearchProductsResponse } from "@/lib/types";
 
-// Only the Supabase network boundary is replaced. Real API validation,
-// entitlements, provider adapters, cache, budgets, matching, scoring and stream
-// decoding are exercised together. Every HTTP request is intercepted; no fallback.
+// The real route, catalog, cache, budgets, pricing, ranking and stream decoder
+// run together. Only external HTTP and the Supabase network boundary are replaced.
 vi.mock("@/lib/supabase", () => ({
   getUserFromRequest: vi.fn(async (request: Request) =>
     request.headers.get("authorization") === "Bearer fixture-token"
@@ -13,15 +12,10 @@ vi.mock("@/lib/supabase", () => ({
   ),
   ensureProfile: vi.fn(async () => ({ subscription_status: "free" })),
 }));
-let calls: URL[];
-let unexpected: string[];
+let calls: URL[], unexpected: string[];
 type Handler = (url: URL) => Promise<Response> | Response;
 let override: Handler | undefined;
 function providers(url: URL): Response {
-  if (url.hostname === "serpapi.com" && url.pathname === "/search.json")
-    return Response.json(fixture.shopping);
-  if (url.hostname === "serpapi.com" && url.pathname === "/locations.json")
-    return Response.json(fixture.location);
   if (
     url.hostname === "world.openfoodfacts.org" &&
     url.pathname === "/cgi/search.pl"
@@ -42,11 +36,10 @@ function providers(url: URL): Response {
 beforeEach(() => {
   vi.resetModules();
   vi.stubEnv("NODE_ENV", "development");
-  vi.stubEnv("SERPAPI_API_KEY", "fixture-key-not-real");
+  vi.stubEnv("SERPAPI_API_KEY", "");
   vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
   vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "");
   vi.stubEnv("SEARCH_ITEMS_PER_DAY", "100");
-  vi.stubEnv("SERPAPI_DAILY_REQUEST_LIMIT", "250");
   vi.spyOn(console, "info").mockImplementation(() => {});
   calls = [];
   unexpected = [];
@@ -62,6 +55,13 @@ beforeEach(() => {
 });
 afterEach(() => {
   const invalid = [...unexpected];
+  expect(
+    calls.every((url) =>
+      ["world.openfoodfacts.org", "prices.openfoodfacts.org"].includes(
+        url.hostname,
+      ),
+    ),
+  ).toBe(true);
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
@@ -90,17 +90,14 @@ async function json(body: unknown) {
   expect(response.headers.get("cache-control")).toBe("no-store");
   return response.json() as Promise<SearchProductsResponse>;
 }
-describe("search API and provider integration (no live calls)", () => {
-  it("returns only matched facts, merges duplicate offers, and uses eligible local prices", async () => {
-    const result = await json({
-      items: ["Yogurt", " yogurt "],
-      zipCode: "01752",
-    });
-    expect(result.items).toHaveLength(1);
-    const row = result.items[0];
+describe("Open Food Facts and Open Prices integration (no live calls)", () => {
+  it("returns catalog nutrition, deduplicates queries and uses eligible local observations", async () => {
+    const row = (
+      await json({ items: ["Yogurt", " yogurt "], zipCode: "01752" })
+    ).items[0];
     expect(row.options).toHaveLength(1);
     const product = row.options[0];
-    expect(product.title).toBe("Acme Plain Yogurt 6 oz");
+    expect(product.title).toBe("Acme Plain Yogurt");
     expect(product.health.nutrition).toMatchObject({
       protein100g: 17,
       carbohydrates100g: 5,
@@ -108,34 +105,19 @@ describe("search API and provider integration (no live calls)", () => {
     });
     expect(product.health.source).toMatchObject({
       provider: "open_food_facts",
-      match: "text",
+      match: "catalog",
     });
     expect(product.priceSource).toBe("open_prices");
     expect(product.estimatedPrice).toBe(2.99);
     expect(product.priceObservation?.locality).toContain("01752");
     expect(
-      product.offers?.filter((offer) => offer.source === "shopping"),
-    ).toHaveLength(2);
-    expect(row.excludedCount).toBe(1);
-    expect(
-      calls.filter(
-        (url) =>
-          url.hostname === "serpapi.com" && url.pathname === "/search.json",
-      ),
+      calls.filter((url) => url.hostname === "world.openfoodfacts.org"),
     ).toHaveLength(1);
     expect(
-      calls
-        .find((url) => url.pathname === "/search.json")
-        ?.searchParams.get("location"),
-    ).toBe(fixture.location[0].canonical_name);
+      calls.filter((url) => url.hostname === "prices.openfoodfacts.org"),
+    ).toHaveLength(1);
   });
-  it("does not attach plain nutrition to another flavor and explains empty results", async () => {
-    override = (url) =>
-      url.pathname === "/search.json"
-        ? Response.json({
-            shopping_results: [fixture.shopping.shopping_results[2]],
-          })
-        : providers(url);
+  it("does not suggest plain yogurt for an explicit vanilla query", async () => {
     const row = (await json({ items: ["vanilla yogurt"] })).items[0];
     expect(row.options).toEqual([]);
     expect(row.emptyReason).toBe("nutrition_missing");
@@ -143,7 +125,7 @@ describe("search API and provider integration (no live calls)", () => {
       calls.some((url) => url.hostname === "prices.openfoodfacts.org"),
     ).toBe(false);
   });
-  it("hides listings when nutrition fails, even though Shopping and the route succeed", async () => {
+  it("explains nutrition service failure without any Shopping fallback", async () => {
     override = (url) =>
       url.hostname === "world.openfoodfacts.org"
         ? new Response("unavailable", { status: 503 })
@@ -151,47 +133,44 @@ describe("search API and provider integration (no live calls)", () => {
     const row = (await json({ items: ["yogurt"] })).items[0];
     expect(row.options).toEqual([]);
     expect(row.emptyReason).toBe("nutrition_unavailable");
-    expect(row.warnings?.join(" ")).toContain("hidden");
+    expect(calls).toHaveLength(1);
   });
-  it("expands allergy search wording and excludes a matched dairy product", async () => {
+  it("excludes dairy conflicts before any price requests", async () => {
     const row = (await json({ items: ["yogurt"], allergies: ["dairy"] }))
       .items[0];
-    expect(
-      calls
-        .find((url) => url.pathname === "/search.json")
-        ?.searchParams.get("q"),
-    ).toContain("dairy free");
     expect(row.options).toEqual([]);
     expect(row.warnings?.join(" ")).toContain("preference conflicts");
+    expect(
+      calls.some((url) => url.hostname === "prices.openfoodfacts.org"),
+    ).toBe(false);
   });
-  it("falls back to a Shopping estimate when the price service fails", async () => {
+  it("keeps nutrition when the price service fails", async () => {
     override = (url) =>
       url.hostname === "prices.openfoodfacts.org"
         ? new Response("unavailable", { status: 503 })
         : providers(url);
     const row = (await json({ items: ["yogurt"] })).items[0];
-    expect(row.options[0].estimatedPrice).toBe(3.49);
-    expect(row.options[0].priceSource).toBe("shopping");
+    expect(row.options).toHaveLength(1);
+    expect(row.options[0].estimatedPrice).toBeNull();
     expect(row.options[0].health.nutrition.protein100g).toBe(17);
     expect(row.warnings?.join(" ")).toContain("Open Prices");
   });
-  it("serves repeated provider lookups from cache without spending more calls", async () => {
+  it("caches repeated catalog and price lookups", async () => {
     await json({ items: ["yogurt"] });
     const count = calls.length;
     await json({ items: ["yogurt"] });
     expect(calls).toHaveLength(count);
   });
-  it("rejects unauthenticated and invalid requests before provider work", async () => {
+  it("rejects authentication and validation errors before provider work", async () => {
     expect((await request({ items: ["yogurt"] }, false, false)).status).toBe(
       401,
     );
     expect(
-      (await request({ items: ["yogurt"], allergies: ["not-an-allergy"] }))
-        .status,
+      (await request({ items: ["yogurt"], allergies: ["invalid"] })).status,
     ).toBe(400);
     expect(calls).toHaveLength(0);
   });
-  it("enforces real item budgets and fails closed in production without Redis", async () => {
+  it("enforces item budgets and fails closed in production without Redis", async () => {
     vi.stubEnv("SEARCH_ITEMS_PER_DAY", "1");
     await json({ items: ["yogurt"] });
     const count = calls.length;
@@ -202,15 +181,15 @@ describe("search API and provider integration (no live calls)", () => {
     expect((await request({ items: ["yogurt"] })).status).toBe(503);
     expect(calls).toHaveLength(count);
   });
-  it("streams a completed item through the actual client decoder while another is pending", async () => {
+  it("streams real results while another catalog lookup is pending", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
     override = async (url) => {
       if (
-        url.pathname === "/search.json" &&
-        url.searchParams.get("q") === "slow"
+        url.hostname === "world.openfoodfacts.org" &&
+        url.searchParams.get("search_terms") === "slow"
       )
         await gate;
       return providers(url);
@@ -241,4 +220,87 @@ describe("search API and provider integration (no live calls)", () => {
     expect(events.at(-1)?.type).toBe("done");
     expect(events.filter((event) => event.type === "item")).toHaveLength(2);
   });
+  it("returns nutrition-backed US sausages for the exact reported payload", async () => {
+    const base = fixture.catalog.products[0];
+    override = (url) =>
+      url.hostname === "world.openfoodfacts.org"
+        ? Response.json({
+            products: [
+              {
+                ...base,
+                product_name: "Chicken Sausage",
+                ingredients_text: "Chicken, salt, spices",
+                allergens_tags: [],
+                image_front_url: "https://images.openfoodfacts.org/fixture.jpg",
+              },
+              {
+                ...base,
+                code: "4006381333931",
+                product_name: "Cheese Sausage",
+                ingredients_text: "Pork, milk",
+                allergens_tags: ["en:milk"],
+              },
+              {
+                ...base,
+                code: "96385074",
+                product_name: "Pork Sausage",
+                countries_tags: ["en:france"],
+              },
+            ],
+          })
+        : providers(url);
+    const row = (
+      await json({
+        items: ["sausage"],
+        dietModes: ["high_protein"],
+        allergies: ["dairy"],
+        bulkPreference: "everyday",
+        zipCode: "01602",
+        limitPerItem: 10,
+      })
+    ).items[0];
+    expect(row.options).toHaveLength(1);
+    const p = row.options[0];
+    expect(p.title).toBe("Acme Chicken Sausage");
+    expect(p.health.nutrition.protein100g).toBe(17);
+    expect(p.health.source?.match).toBe("catalog");
+    expect(p.market).toBe("US-catalog");
+    expect(p.estimatedPrice).toBeNull();
+    expect(p.imageUrl).toContain("images.openfoodfacts.org");
+    expect(calls).toHaveLength(2);
+  });
+  it.each(["foreign", "stale", "wrong-barcode", "wrong-ZIP"])(
+    "does not attach a %s receipt price",
+    async (reason) => {
+      override = (url) =>
+        url.hostname === "prices.openfoodfacts.org"
+          ? Response.json({
+              items: [
+                {
+                  ...fixture.price,
+                  date:
+                    reason === "stale"
+                      ? "2020-01-01"
+                      : new Date().toISOString().slice(0, 10),
+                  product_code:
+                    reason === "wrong-barcode"
+                      ? "4006381333931"
+                      : fixture.price.product_code,
+                  location: {
+                    ...fixture.price.location,
+                    osm_address_country_code:
+                      reason === "foreign" ? "FR" : "US",
+                    osm_address_postcode:
+                      reason === "wrong-ZIP" ? "99999" : "01752",
+                  },
+                },
+              ],
+            })
+          : providers(url);
+      const p = (await json({ items: ["yogurt"], zipCode: "01752" })).items[0]
+        .options[0];
+      expect(p.estimatedPrice).toBeNull();
+      expect(p.offers).toEqual([]);
+    },
+  );
 });

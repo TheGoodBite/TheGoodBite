@@ -26,6 +26,8 @@ export type OffProduct = {
   nova_group?: number;
   nutriments?: Record<string, number | string>;
   serving_size?: string;
+  image_front_url?: string;
+  image_url?: string;
   ingredients_text?: string;
   labels_tags?: string[];
   categories_tags?: string[];
@@ -33,7 +35,7 @@ export type OffProduct = {
   traces_tags?: string[];
 };
 const FIELDS =
-  "code,product_name,brands,quantity,countries_tags,nutriscore_grade,nova_group,nutriments,serving_size,ingredients_text,labels_tags,categories_tags,allergens_tags,traces_tags";
+  "code,product_name,brands,quantity,countries_tags,nutriscore_grade,nova_group,nutriments,serving_size,ingredients_text,labels_tags,categories_tags,allergens_tags,traces_tags,image_front_url,image_url";
 const unknown = (availability: "no_match" | "unavailable"): HealthInfo => ({
   ...UNKNOWN_HEALTH,
   availability,
@@ -91,7 +93,7 @@ export function matchProduct(
 }
 export function fromOffProduct(
   product: OffProduct,
-  match: "barcode" | "text",
+  match: "barcode" | "text" | "catalog",
 ): HealthInfo {
   const n = product.nutriments ?? {};
   const nutrient = (key: string) => {
@@ -109,7 +111,7 @@ export function fromOffProduct(
   const health = classifyHealth({
     nutriScore: product.nutriscore_grade,
     novaGroup: product.nova_group,
-    confidence: match === "barcode" ? "high" : "medium",
+    confidence: match === "text" ? "medium" : "high",
     nutrition: {
       protein100g: nutrient("proteins"),
       sugars100g: nutrient("sugars"),
@@ -172,7 +174,7 @@ async function getByBarcode(code: string) {
     },
   );
 }
-async function searchCatalog(query: string) {
+export async function searchCatalog(query: string) {
   return getOrSet<OffProduct[]>(
     `off:v4:us-search:${await sha256(normalizeQuery(query))}`,
     86400,

@@ -1,9 +1,6 @@
-import { searchGoogleShoppingProducts } from "@/lib/providers/googleShopping";
-import { enrichProducts } from "@/lib/providers/openFoodFacts";
+import { discoverNutritionProducts } from "@/lib/catalogDiscovery";
 import { getOpenPricesForBarcode } from "@/lib/providers/openPrices";
-import { deduplicateProducts, withUnitPrice } from "@/lib/products";
-import { buildShoppingQuery } from "@/lib/searchPreferences";
-import { hasVerifiedNutritionFacts } from "@/lib/health";
+import { withUnitPrice } from "@/lib/products";
 import { rankProducts } from "@/lib/scoring";
 import { mapConcurrent } from "@/lib/providerRuntime";
 import type {
@@ -18,96 +15,87 @@ export async function searchItem(
 ): Promise<SearchProductsResponse["items"][number]> {
   const start = Date.now();
   signal.throwIfAborted();
-  const shoppingQuery = buildShoppingQuery(
-    query,
-    preferences.dietModes ?? [],
-    preferences.allergies ?? [],
-    preferences.bulkPreference,
-  );
-  const raw = await searchGoogleShoppingProducts(
-    shoppingQuery,
-    15,
-    preferences.zipCode,
-    signal,
-  );
-  signal.throwIfAborted();
-  const unique = deduplicateProducts(raw);
-  const enriched = await enrichProducts(unique, query, signal);
-  const warnings = new Set(enriched.warnings);
-  const matched = deduplicateProducts(enriched.candidates);
-  const supported = matched.filter((candidate) =>
-    hasVerifiedNutritionFacts(
-      enriched.healthById.get(candidate.providerProductId),
-    ),
-  );
-  const missingNutritionCount = matched.length - supported.length;
-  if (missingNutritionCount)
-    warnings.add(
-      `${missingNutritionCount} shopping listing${missingNutritionCount === 1 ? " was" : "s were"} hidden because matched nutrition facts are unavailable.`,
-    );
-  const candidates = await mapConcurrent(supported, 3, async (candidate) => {
+  let catalog: Awaited<ReturnType<typeof discoverNutritionProducts>>;
+  try {
+    catalog = await discoverNutritionProducts(query, signal);
+  } catch {
     signal.throwIfAborted();
-    if (!candidate.upc || candidate.package?.bulk)
-      return withUnitPrice(candidate);
-    try {
-      const observed = await getOpenPricesForBarcode(
-        candidate.upc,
-        preferences.zipCode,
-      );
-      if (observed)
-        return withUnitPrice({
-          ...candidate,
-          estimatedPrice: observed.amount,
-          currency: "USD",
-          priceSource: "open_prices",
-          priceObservation: observed,
-          offers: [...(candidate.offers ?? []), observed],
-        });
-    } catch {
-      warnings.add(
-        "Some Open Prices lookups were unavailable. Shopping price estimates are retained where available.",
-      );
+    return {
+      query,
+      options: [],
+      emptyReason: "nutrition_unavailable",
+      warnings: [
+        "Nutrition catalog lookup is temporarily unavailable. Please try again shortly.",
+      ],
+    };
+  }
+  if (!catalog.candidates.length)
+    return {
+      query,
+      options: [],
+      emptyReason: "nutrition_missing",
+      warnings: [
+        "No relevant US-market products with nutrition facts were found.",
+      ],
+    };
+  const warnings = new Set<string>();
+  const rank = (candidates: typeof catalog.candidates, limit: number) =>
+    rankProducts({
+      query,
+      candidates,
+      healthById: catalog.healthById,
+      dietModes: preferences.dietModes ?? [],
+      allergies: preferences.allergies ?? [],
+      bulkPreference: preferences.bulkPreference,
+      limit,
+    });
+  const eligible = rank(catalog.candidates, catalog.candidates.length);
+  const excludedCount = catalog.candidates.length - eligible.length;
+  if (excludedCount)
+    warnings.add(
+      `${excludedCount} catalog option${excludedCount === 1 ? "" : "s"} excluded for relevance or preference conflicts.`,
+    );
+  const selected = eligible.slice(
+    0,
+    Math.min(preferences.limitPerItem ?? 10, 20),
+  );
+  const withPrices = await mapConcurrent(selected, 3, async (product) => {
+    signal.throwIfAborted();
+    let candidate: typeof product = product;
+    if (candidate.upc && !candidate.package?.bulk) {
+      try {
+        const observed = await getOpenPricesForBarcode(
+          candidate.upc,
+          preferences.zipCode,
+        );
+        if (observed)
+          candidate = {
+            ...candidate,
+            estimatedPrice: observed.amount,
+            currency: "USD",
+            priceSource: "open_prices",
+            priceObservation: observed,
+            offers: [...(candidate.offers ?? []), observed],
+          };
+      } catch {
+        warnings.add(
+          "Some Open Prices lookups were unavailable. Missing prices remain unknown.",
+        );
+      }
     }
     return withUnitPrice(candidate);
   });
-  const all = rankProducts({
-    query,
-    candidates,
-    healthById: enriched.healthById,
-    dietModes: preferences.dietModes ?? [],
-    allergies: preferences.allergies ?? [],
-    bulkPreference: preferences.bulkPreference,
-    limit: candidates.length,
-  });
-  const preferenceExcludedCount = candidates.length - all.length;
-  const excludedCount = missingNutritionCount + preferenceExcludedCount;
-  if (preferenceExcludedCount)
+  const options = rank(withPrices, preferences.limitPerItem ?? 10);
+  if (options.some((product) => product.estimatedPrice === null))
     warnings.add(
-      `${preferenceExcludedCount} option${preferenceExcludedCount === 1 ? "" : "s"} excluded for relevance or preference conflicts.`,
+      "Some products have nutrition facts but no verified local price. Availability is not confirmed.",
     );
   console.info("meezany.search.item", {
     durationMs: Date.now() - start,
-    candidates: raw.length,
-    unique: unique.length,
+    discovery: "nutrition_catalog",
+    nutritionMatched: catalog.candidates.length,
     excluded: excludedCount,
-    nutritionMatched: supported.length,
-    missingNutrition: missingNutritionCount,
+    options: options.length,
   });
-  return {
-    query,
-    options: all.slice(0, preferences.limitPerItem ?? 10),
-    warnings: [...warnings],
-    excludedCount,
-    ...(!all.length && missingNutritionCount
-      ? {
-          emptyReason: matched.some(
-            (candidate) =>
-              enriched.healthById.get(candidate.providerProductId)
-                ?.availability === "unavailable",
-          )
-            ? ("nutrition_unavailable" as const)
-            : ("nutrition_missing" as const),
-        }
-      : {}),
-  };
+  return { query, options, warnings: [...warnings], excludedCount };
 }

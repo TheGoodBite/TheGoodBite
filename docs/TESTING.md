@@ -12,18 +12,21 @@ npm run build
 
 `npm test` runs both offline suites and skips the live test unless explicitly opted in. The GitHub Actions workflow runs unit tests, integration tests, type checking, and a production build for main pushes and pull requests. It requires no service credentials. It consumes runner minutes under the repository's existing GitHub plan, not provider credits.
 
-The integration suite runs the real search route through request validation, entitlements, rolling local budgets, provider adapters, product identity, nutrition matching, exclusion rules, cache, price enrichment, ranking, and the actual client stream decoder. It covers:
+The integration suite runs the real search route through request validation, entitlements, rolling local budgets, provider adapters, catalog product identity, nutrition evidence, exclusion rules, cache, price enrichment, ranking, and the actual client stream decoder. It covers:
 
-- Deduplicated queries and product offers; USD and US-location handling.
-- Matched nutrition with explicit units, carbohydrate values, and valid zero values.
-- Wrong-flavor nutrition rejected; unsupported products hidden.
-- Nutrition outages returning explained empty results even when the request succeeds.
-- Allergy query expansion and exclusion after matching.
-- Shopping price fallback when Open Prices is unavailable.
+- Deduplicated queries and US-market catalog records with exact barcode identity.
+- Sourced nutrition with explicit units, carbohydrate values, and valid zero values.
+- Wrong-flavor suggestions rejected; records without nutrition facts hidden.
+- Catalog outages returning explained empty results with no Shopping fallback.
+- Allergy conflicts excluded before price lookups; preferences rank the catalog directly.
+- Open Prices failure retaining nutrition products with unknown prices.
+- Foreign, stale, wrong-barcode, and wrong-ZIP price observations rejected.
 - Repeated requests served from provider caches.
 - Authentication/validation rejection before provider calls.
 - Item budgets and production failure when shared Redis is unconfigured.
 - Progressive results while another item is still pending.
+- The exact reported sausage/high-protein/dairy/01602 request returning eligible nutrition products.
+- Only Open Food Facts and Open Prices HTTP destinations allowed in the search pipeline.
 
 Provider responses are synthetic fixtures in `tests/fixtures/search-providers.json`, designed to represent actual response schemas. They are not real product labels or receipts. HTTP calls are intercepted and unexpected destinations fail the test. Supabase authentication/profile lookup is replaced at its network boundary; all downstream application logic is real.
 
@@ -35,7 +38,7 @@ These tests detect regressions in our code. They cannot prove current provider a
 npm run test:live
 ```
 
-Requires `.env.local` with configured provider/cache credentials. This is deliberately excluded from CI. It searches Greek yogurt with ZIP 01752 and a high-protein preference through the real pipeline, including up to three targeted catalog lookups and bounded price enrichment. Cached results may reduce calls. Uncached Shopping calls consume SerpAPI quota; live requests count toward all provider budgets. It verifies returned products have matched nutrition facts; an explained empty result is allowed because the catalog may lack a valid match.
+Requires `.env.local` with configured provider/cache credentials. This is deliberately excluded from CI. It searches Greek yogurt with ZIP 01752 and a high-protein preference through the real pipeline, using one catalog lookup and bounded exact-barcode price enrichment. Cached results may reduce calls. No Shopping credits are used; live requests count toward provider and Redis budgets. It verifies returned products have matched nutrition facts; an explained empty result is allowed because the catalog may lack a valid match.
 
 Run this deliberately after provider configuration changes or before a release. It is not a broad coverage benchmark, and is not reliable enough to block every commit. No automatic schedule is configured.
 

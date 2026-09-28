@@ -93,7 +93,9 @@ export function ProductDetail({
       <p className="fine-print">
         {primaryPrice?.source === "open_prices"
           ? `Observed ${primaryPrice.observedAt} · ${primaryPrice.locality || "United States"} · Open Prices`
-          : "Shopping estimate"}
+          : product.estimatedPrice === null
+            ? "Local price and store availability not verified"
+            : "Shopping estimate"}
         {servings != null && servings > 0 && product.estimatedPrice !== null
           ? ` · $${(product.estimatedPrice / servings).toFixed(2)} / serving`
           : ""}
@@ -239,9 +241,11 @@ export function ProductDetail({
                   "Open Food Facts"
                 )}{" "}
                 ·{" "}
-                {health.source.match === "barcode"
-                  ? "barcode match"
-                  : "brand and variant text match"}
+                {health.source.match === "catalog"
+                  ? "nutrition catalog record"
+                  : health.source.match === "barcode"
+                    ? "barcode match"
+                    : "brand and variant text match"}
                 .<br />
                 Matched: {health.source.productName}
               </p>
@@ -254,8 +258,9 @@ export function ProductDetail({
               NOVA: <strong>{health.novaGroup ?? "Unknown"}</strong>
             </p>
             <p className="fine-print">
-              Shopping results enriched with Open Food Facts where a match is
-              available. Match scores are not category-relative health scores.
+              Product nutrition comes from Open Food Facts. Prices are attached
+              only where a matching offer or observation is available. Match
+              scores are not category-relative health scores.
             </p>
             {product.dietFit.warnings.map((warning) => (
               <p className="notice" key={warning}>
@@ -274,7 +279,9 @@ export function ProductDetail({
               {offer.seller || "Store unknown"} ·{" "}
               {offer.source === "open_prices"
                 ? "Open Prices observation"
-                : "Shopping estimate"}
+                : product.estimatedPrice === null
+                  ? "Local price and store availability not verified"
+                  : "Shopping estimate"}
               <br />
               {offer.observedAt.slice(0, 10)}
               {offer.locality ? ` · ${offer.locality}` : ""}

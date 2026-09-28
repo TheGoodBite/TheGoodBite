@@ -73,7 +73,7 @@ export type ProductCandidate = {
   productUrl?: string;
   seller?: string;
   currency?: "USD";
-  market?: "US-search";
+  market?: "US-search" | "US-catalog";
   package?: PackageInfo;
   offers?: PriceObservation[];
   priceSource?: "shopping" | "open_prices";
@@ -102,7 +102,7 @@ export type HealthInfo = {
     barcode?: string;
     productName: string;
     url?: string;
-    match: "barcode" | "text";
+    match: "barcode" | "text" | "catalog";
     fetchedAt: string;
   };
   availability?: "matched" | "no_match" | "unavailable";

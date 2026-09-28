@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-// Explicit opt-in only: one shopping request, one catalog lookup, and bounded price enrichment.
+// Explicit opt-in only: one nutrition catalog lookup and bounded Open Prices enrichment.
 it.skipIf(process.env.MEEZANY_LIVE_TESTS !== "1")(
   "checks the configured US discovery pipeline",
   async () => {
@@ -29,8 +29,8 @@ it.skipIf(process.env.MEEZANY_LIVE_TESTS !== "1")(
     const { hasVerifiedNutritionFacts } = await import("@/lib/health");
     for (const product of result.options) {
       expect(hasVerifiedNutritionFacts(product.health)).toBe(true);
-      expect(product.provider).toBe("serpapi_google_shopping");
-      expect(product.market).toBe("US-search");
+      expect(product.provider).toBe("open_food_facts");
+      expect(product.market).toBe("US-catalog");
       if (product.estimatedPrice !== null) expect(product.currency).toBe("USD");
     }
   },

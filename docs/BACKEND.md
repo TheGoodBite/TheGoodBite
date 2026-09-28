@@ -4,38 +4,36 @@ Updated September 28, 2026. This describes shipped behavior; the full product vi
 
 ## Search and product identity
 
-The authenticated search route validates supported preferences, ZIP, and list size before spending provider credits. Each item expands its shopping query with up to two relevant preference hints, prioritizing allergies. Final evidence checks still run after retrieval: search wording alone cannot establish compatibility.
+The authenticated search route validates supported preferences, ZIP, and list size before provider requests. Product discovery uses only Open Food Facts; prices use only Open Prices. There are no active Shopping or SerpAPI calls, location-resolution requests, or retailer-title nutrition matching steps.
 
-SerpAPI uses US country/language/domain settings and a canonical US location resolved from the optional ZIP. This biases discovery, but cannot guarantee domestic origin, local stock, or shelf prices. Foreign currencies are rejected and unqualified prices remain unknown. No missing-key mock fallback exists.
+One shared, cached US catalog search retrieves up to 50 records per grocery query. Each visible product requires a valid GTIN, product name, explicit `en:united-states` country tag, relevant title, and nutrition evidence from its own record. All requested title words must match after normalization, avoiding wrong-flavor suggestions. Catalog search is first-page discovery rather than exhaustive inventory; specific queries can miss products. US-market tags describe where a product is sold, not its origin or current local availability.
 
-Products are deduplicated before enrichment and again after barcode resolution. Identity uses validated GTINs or normalized variant-preserving titles plus package quantities/counts. Different flavors, fat percentages, sizes, and multipacks stay separate. Seller offers are grouped; the cheaper equivalent offer becomes primary. Conservative matching can leave duplicates when source identity is incomplete.
-
-Package parsing supports weight, volume, and multipacks. Ambiguous multiple measurements or total/net-weight multipack descriptions do not get an inferred unit price. Ranking compares compatible price units where possible. Bulk preference affects retrieval/ranking; an explicit bulk query takes precedence. Package count is never treated as servings.
+Products are deduplicated by validated GTIN or variant-preserving title and package identity. Different flavors, sizes, and multipacks stay separate. Package parsing supports weight, volume, and multipacks. Ambiguous measurements do not receive inferred unit prices. Bulk preference affects ranking; package count is never treated as servings.
 
 ## Nutrition and preference evidence
 
-Open Food Facts uses one shared US catalog lookup per grocery query. Up to three unmatched leading candidates receive a cached, targeted lookup to recover products omitted from the broad first page; these share the same global budget. Exact barcode lookup is preferred. Text matching normalizes yogurt spelling and sausage plurals, then requires brand and all variant words to agree; ambiguous matches stay unknown. A matching package can resolve a catalog barcode. There is no arbitrary first-result nutrition fallback.
+Nutrition is mapped directly from the selected Open Food Facts catalog record. This avoids the earlier failure where a retailer listing had no barcode and could not be matched to an otherwise available nutrition product. Only explicit per-100g nutriments are mapped, including carbohydrates; missing values stay missing. Details expose the source record and catalog match method. The existing nutrition algorithm is not a calibrated category-relative score; the combined score is labeled Match score.
 
-Only explicit per-100g nutriments are mapped, including carbohydrates. Missing values stay missing. Product details expose the nutrition source and match method. The existing nutrition algorithm is not a calibrated category-relative score; the combined score is labeled Match score.
+Products need a nutrition source and at least one finite, nonnegative nutrient displayed in the nutrition panel. Scores, ingredients, and title tags alone do not qualify; zero values do. Unsupported products are hidden. Empty results distinguish catalog outages from missing eligible nutrition. Partial nutrition remains visible with missing fields marked unknown.
 
-Diet evaluation distinguishes match, conflict, and unknown. Missing nutrient data does not count as meeting a nutrient goal. Selected allergen conflicts and categorical vegan/vegetarian/gluten-free/FODMAP conflicts are excluded. Products without a matched nutrition source and at least one finite, nonnegative value shown in the nutrition panel are hidden before price enrichment and ranking. Scores, ingredients, and title tags alone do not qualify. A zero nutrient value counts as data. Empty results distinguish lookup failure from missing nutrition. Partial nutrition stays visible with missing fields marked unknown; absence of an allergen mention is not proof of safety. Ingredients, traces, and labels are imperfect source data. FODMAP remains a beta signal dependent on portion and preparation; absence of a keyword is not a positive match.
+Diet evaluation distinguishes match, conflict, and unknown. Preferences are evaluated over catalog records before selecting and pricing recommendations. Known allergen conflicts and categorical vegan/vegetarian/gluten-free/FODMAP conflicts are excluded. Nutrient goals affect ranking; missing data does not establish a match. Absence of an allergen mention is not proof of safety. Ingredients, traces, and labels are imperfect source data. FODMAP remains a beta signal dependent on portion and preparation.
 
 ## Prices and provenance
 
-Open Prices is now connected to search. It is used only for validated exact barcodes and recent observations (30 days), in USD, at US locations, with matching ZIP when requested. Future, duplicate, discounted, and per-weight observations are rejected. Bulk candidates retain Shopping estimates to avoid substituting a single-unit receipt price for a case.
+Open Prices is queried only for selected eligible products with validated exact barcodes. Observations must be within 30 days, in USD, at US locations, with matching ZIP when requested. Future, duplicate, discounted, and per-weight observations are rejected. Bulk candidates skip pricing to avoid substituting a single-unit receipt price for a case.
 
-An eligible observation becomes the primary estimate, with source, date, locality, and link. Original Shopping offers remain available. Sparse Open Prices coverage means many products will still use Shopping prices. Neither source is a real-time inventory guarantee. Unit price is displayed only with a supported denominator; price per serving needs explicit serving count.
+An eligible observation includes its source, date, locality, and link. Products without an eligible observation remain visible with nutrition and an unknown price. No Shopping estimates are substituted. Sparse price coverage, especially at an exact ZIP, is expected. These observations do not establish real-time inventory or shelf prices. Unit prices require supported denominators; price per serving requires an explicit serving count.
 
 ## Performance and cost control
 
-- Four grocery items run concurrently; nutrition/price enrichment uses bounded workers.
+- Four grocery items run concurrently; each uses one shared catalog query followed by up to three concurrent price lookups for its selected recommendations (default 10, maximum 20).
 - Completed items stream as NDJSON (`meta`, `item`, `done`); JSON remains supported. Failures are isolated per item and interrupted streams are visible as retryable errors.
-- Request scheduling deadline is 45 seconds; route maximum duration is 60 seconds. In-flight shared cache lookups use their own bounded timeouts and can briefly outlive a disconnected request.
-- Provider timeouts default to 6 seconds; Shopping uses 9 seconds and Open Prices 3.5 seconds. Redis uses a 1.5-second timeout with retries disabled.
-- Identical in-process cache misses share one request. Empty/no-match answers are cached for at most five minutes; errors are not cached. Provider-specific positive cache lifetimes are in their modules.
-- Rolling shared budgets: 10 search requests/minute/user; 100 items/day/user by default; 250 SerpAPI requests/day globally by default, including location requests; OFF catalog 10/minute, OFF barcode 15/minute, Open Prices 30/minute.
-- `SEARCH_ITEMS_PER_DAY` and `SERPAPI_DAILY_REQUEST_LIMIT` configure the daily limits. Shared Redis enforcement is mandatory in production and fails closed on outage. Development without Redis has local-only limits.
-- Structured search metrics include elapsed time and counts, excluding raw queries and user identifiers. No automatic paid quota expansion or billing change is included.
+- Request scheduling deadline is 45 seconds; route maximum duration is 60 seconds. Shared cache lookups have their own bounded timeouts and can briefly outlive a disconnected request.
+- Provider timeouts default to 6 seconds; Open Prices uses 3.5 seconds. Redis uses a 1.5-second timeout with retries disabled.
+- Identical in-process cache misses share one request. Catalog records are cached for a day and price lookups for an hour. Empty/no-match answers are cached for at most five minutes; errors are not cached. Catalog records cached before photo fields were added can lack photos until refreshed.
+- Rolling shared budgets: 10 search requests/minute/user; 100 items/day/user by default; OFF catalog 10/minute, OFF barcode 15/minute for legacy helpers, Open Prices 30/minute. The active pipeline does not require separate barcode enrichment.
+- `SEARCH_ITEMS_PER_DAY` configures the daily item limit. Shared Redis enforcement is mandatory in production and fails closed on outage. Development without Redis has local-only limits.
+- Structured search metrics include elapsed time and counts, excluding raw queries and user identifiers. No paid Shopping quota is consumed.
 
 ## Persistence and database security
 
@@ -56,14 +54,14 @@ The security advisor still reports the pre-existing disabled leaked-password-pro
 
 Run `npm run typecheck`, `npm test`, and `npm run build`. Unit/route tests cover provider normalization, matching, evidence, duplicate/package identity, price eligibility, budgets, caching, streaming, and errors. Database SQL checks exercise cross-account list/item/purchase rejection, rollback, purchase history, and privilege boundaries.
 
-Opt-in real provider smoke test (uses configured credits and `.env.local`):
+Opt-in real provider smoke test (uses provider budgets and `.env.local`):
 
 ```sh
 MEEZANY_LIVE_TESTS=1 npm test -- tests/integration/providers-live.test.ts
 ```
 
-A live Greek yogurt search for ZIP 01752 passed during implementation. It confirms the provider path works, not complete catalog coverage or nutrition correctness for every product. Browser smoke checks use clearly isolated mocked API fixtures to avoid creating user purchases or lists.
+The reported sausage request (high protein, dairy avoidance, everyday packs, ZIP 01602, limit 10) returned 10 products with sourced nutrition in approximately 2 seconds with a cached catalog. All 10 had unknown local prices. Only Open Prices HTTP calls were made after the catalog cache hit. This confirms the provider path works, not complete coverage or independent verification of every source nutrient. Browser smoke checks use clearly isolated mocked API fixtures to avoid creating user purchases or lists.
 
 ## Remaining product work
 
-Calibrated category-relative scoring, store inventory integrations, recipe generation, per-item preference exceptions, full preference synchronization, and the other vision features are separate work. Better recall should come from stronger product identifiers and verified catalog coverage, not looser nutrition matching. Tune ranking with representative real lists before making performance or nutrition-quality claims.
+Calibrated category-relative scoring, store inventory integrations, recipe generation, per-item preference exceptions, full preference synchronization, and the other vision features are separate work. Better recall should come from catalog query coverage and pagination while preserving product identity. Tune ranking with representative real lists before making performance or nutrition-quality claims.
