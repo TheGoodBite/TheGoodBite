@@ -87,9 +87,9 @@ export function rankProducts(input: {
             : 0;
       const score =
         relevance * 0.3 +
-        price * 0.2 +
-        diet * 0.25 +
-        (healthKnown ? (clamp(healthScore, 0, 60) / 60) * 25 : 0) +
+        price * 0.15 +
+        diet * 0.2 +
+        (healthKnown ? (clamp(healthScore, 0, 100) / 100) * 35 : 0) +
         history -
         bulkPenalty;
       const allergenAttributes = Object.keys(preferences).filter(id =>

@@ -72,6 +72,23 @@ describe("rankProducts", () => {
     expect(ranked[0].overallScore).toBeGreaterThan(ranked[1].overallScore);
   });
 
+  it("lets an A grade outrank a B grade in otherwise equal cereal options", () => {
+    const aGrade = makeCandidate({ id: "a-grade", title: "Cereal", estimatedPrice: 3 });
+    const bGrade = makeCandidate({ id: "b-grade", title: "Cereal", estimatedPrice: 3 });
+    const ranked = rankProducts({
+      query: "cereal",
+      candidates: [bGrade, aGrade],
+      healthById: new Map([
+        ["a-grade", { ...UNKNOWN_HEALTH, nutriScore: "a", novaGroup: 4 }],
+        ["b-grade", { ...UNKNOWN_HEALTH, nutriScore: "b", novaGroup: 1 }],
+      ]),
+      dietModes: [],
+      limit: 2,
+    });
+
+    expect(ranked[0].providerProductId).toBe("a-grade");
+  });
+
   it("respects limit parameter", () => {
     const candidates = Array.from({ length: 10 }, (_, i) =>
       makeCandidate({ id: `product-${i}`, title: "Potato Chips" })

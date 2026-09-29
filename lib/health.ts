@@ -53,17 +53,18 @@ export function classifyHealth(input: {
 }
 
 export function scoreHealth(health: HealthInfo) {
-  let score = 0;
-
-  if (health.nutriScore === "a") score += 40;
-  if (health.nutriScore === "b") score += 30;
-  if (health.nutriScore === "c") score += 10;
-  if (health.nutriScore === "d" || health.nutriScore === "e") score -= 20;
-
-  if (health.novaGroup !== null && health.novaGroup <= 3) score += 20;
-  if (health.novaGroup === 4) score -= 30;
-
-  return score;
+  // Keep the nutrition grade as the primary signal. Processing level is a
+  // secondary adjustment and must not make a lower Nutri-Score grade win.
+  const gradeScores: Record<HealthInfo["nutriScore"], number> = {
+    a: 100,
+    b: 75,
+    c: 50,
+    d: 25,
+    e: 0,
+    unknown: 0,
+  };
+  const gradeScore = gradeScores[health.nutriScore];
+  return Math.max(0, gradeScore - (health.novaGroup === 4 ? 10 : 0));
 }
 
 export function hasNutritionInfo(health?: HealthInfo | null): boolean {
