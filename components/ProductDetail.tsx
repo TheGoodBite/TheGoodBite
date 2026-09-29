@@ -18,7 +18,6 @@ import {
   ProductImage,
   ProductPrice,
   NutriScoreBadge,
-  ScoreBadge,
   priceLocationExplanation,
 } from "./ProductPresentation";
 
@@ -87,12 +86,11 @@ export function ProductDetail({
         <p className="notice">Demo example · not a verified product or price</p>
       )}
       <div className="detail-score">
-        <ScoreBadge product={product} large />
-        <div>
-          <strong>Match score</strong>
-          <span>Nutrition, price & your preferences</span>
-        </div>
         <NutriScoreBadge product={product} />
+        <div>
+          <strong>Open Food Facts Nutri-Score</strong>
+          <span>A is best; E is lowest. No combined match score.</span>
+        </div>
       </div>
       <h2>{product.title}</h2>
       <div className="price-line">

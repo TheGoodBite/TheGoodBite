@@ -15,7 +15,7 @@ export const TAG_EXPLANATIONS: Record<string, string> = {
   non_gmo: "A non-GMO claim appears in the catalog labels or product description. This claim does not measure nutritional quality or processing level.",
   high_protein: "The catalog lists at least 10 g of protein per 100 g. The amount in your serving depends on the portion size.",
   sweeteners: "The ingredients list includes a sweetener or sugar substitute. Open the Ingredients tab to see which ones are listed.",
-  nova4: "The catalog assigns NOVA group 4, the ultra-processed category. NOVA describes the extent and purpose of food processing, separately from Nutri-Score or your match score.",
+  nova4: "The catalog assigns NOVA group 4, the ultra-processed category. NOVA describes the extent and purpose of food processing, separately from Nutri-Score.",
   high_sugar: "The catalog lists more than 15 g of sugars per 100 g. This is the app’s flag threshold; check the serving size to understand your portion.",
   high_sodium: "The catalog lists more than 500 mg of sodium per 100 g. This is the app’s flag threshold; the amount in your serving depends on the portion size.",
   spicy: "The name, ingredients, or catalog categories mention a spicy ingredient or flavor. This is a flavor attribute.",

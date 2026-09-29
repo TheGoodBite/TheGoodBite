@@ -621,16 +621,6 @@ img {
   font-size: 10px;
   color: var(--muted);
 }
-.score {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 5px;
-  border-radius: 6px;
-  font-size: 15px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
 .nutri-score {
   display: inline-flex;
   align-items: center;
@@ -657,35 +647,6 @@ img {
 .nutri-score-unknown { color: #64645f; background: #f2f2ef; }
 .detail-score .nutri-score strong { font-size: 14px; font-weight: 750; }
 .detail-score .nutri-score > span { font-size: 8px; color: inherit; }
-.score-good {
-  color: #18683b;
-  background: #e8f3eb;
-}
-.score-mixed {
-  color: #865700;
-  background: #fff3d6;
-}
-.score-low {
-  color: #a33229;
-  background: #fbece9;
-}
-.score-neutral {
-  color: #64645f;
-  background: #eeeeec;
-}
-.score-large {
-  display: flex;
-  flex-direction: column;
-  font-size: 25px;
-  padding: 5px 10px;
-  line-height: 1.1;
-  min-width: 53px;
-}
-.score-large small {
-  font-size: 9px;
-  font-weight: 400;
-  margin-top: 3px;
-}
 .product-detail h2 {
   font-size: 22px;
   overflow-wrap: anywhere;
@@ -1091,6 +1052,12 @@ img {
   margin: 8px 0 22px;
   font-size: 13px;
   color: var(--muted);
+}
+.sort-explanation {
+  margin: -12px 0 18px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
 }
 .options-toolbar select {
   padding: 8px;

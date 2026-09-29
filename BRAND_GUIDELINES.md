@@ -73,15 +73,15 @@ Show loading per searched row. Distinguish not searched, no results, and provide
 
 ### Product Options
 
-Stable image dimensions with `object-fit: contain`; never crop labels. Use a neutral missing-image state. Sort by best match, lowest estimated price, or nutrition score. Unknown prices go last.
+Stable image dimensions with `object-fit: contain`; never crop labels. Use a neutral missing-image state. Sort by best match, lowest comparable unit price, or Open Food Facts Nutri-Score. Unknown prices and grades stay explicitly unknown.
 
-Show title, known package size, estimated price, labeled score, factual tags, and a detail action. `overallScore` is a **match score** because it includes relevance, price, diet fit, and health. Do not relabel it as a pure health score. Calibrated category-relative nutrition scoring remains future work.
+Show title, known package size, estimated price, Open Food Facts Nutri-Score grade, factual preference matches, and a detail action. Do not invent or display a combined 0–100 score. Explain the sort order: category fit, Nutri-Score grade and numeric score, product name/brand match, selected preferences, bulk preference, then comparable price.
 
 ### Product Detail
 
-Large image, match score, title, package size, estimated price, seller link, tags, bought action. Tabs: Nutrition, Ingredients, About. Current nutrition data is per 100g, so label it that way. Show price per serving only when both price and a real serving count exist. Unknown is never zero.
+Large image, Nutri-Score, title, package size, estimated price, seller link, tags, bought action. Tabs: Nutrition, Ingredients, About. Current nutrition data is per 100g, so label it that way. Show price per serving only when both price and a real serving count exist. Unknown is never zero.
 
-Use text alongside colors. Show source/confidence and missing data. Do not imply an allergy match establishes safety; users must verify packaging. Keep FODMAP explicitly beta. A strong match score does not establish complete nutrition evidence.
+Use text alongside colors. Show source/confidence and missing data. Do not imply an allergy match establishes safety; users must verify packaging. Keep FODMAP explicitly beta. A strong Nutri-Score does not establish complete nutrition or ingredient evidence.
 
 ### Preferences
 
@@ -117,7 +117,7 @@ The current app uses this system in `components/Dashboard.tsx`, `components/Prod
 - Mobile: compact header, bottom navigation, horizontally browsable option cards, and native dialog sheets.
 - Existing discovery flows: list search, quick lookup, diet/allergen preferences, optional ZIP, product details, Google/email sign-in, saved-list snapshots, and purchase recording.
 - List entry accepts commas, newlines, bullets, and numbered lists, with case-insensitive duplicates removed. Reorder with drag handles or move buttons in Edit list. Checkoffs are local UI state; Bought this records a product only after the API succeeds.
-- Product options sort by match, estimated price, or the existing nutrition score. Missing prices and missing nutrition rank last in their respective sorts.
+- Product options sort by best match, comparable unit price, or Open Food Facts Nutri-Score. Missing values stay unknown; no combined 0–100 score is shown.
 - Recipes, scan, social, export, and meal-calendar navigation are deferred until those flows exist.
 
 The original reference assets are retained. The SVG ribbon is a provisional interpretation; final production vector artwork is still needed for an exact logo match.

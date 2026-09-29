@@ -11,7 +11,7 @@ export function PreferenceControls({ value, onChange, unwantedIngredients, onUnw
   onUnwantedChange: (text: string) => void;
 }) {
   return <div className="product-preferences">
-    <p className="fine-print">Important affects ranking. Very important has twice the weight. Mandatory applies Open Food Facts filters and requires matching Open Food Facts evidence.</p>
+    <p className="fine-print">Important preferences break ties after Nutri-Score. Very important preferences break ties before important ones. Mandatory preferences filter out products without a verified match in Open Food Facts.</p>
     {PREFERENCE_GROUPS.map(group => <section key={group.id}>
       <h3>{group.label}</h3>
       {group.id === "allergens" && <p className="fine-print">For an allergy, choose Mandatory. Allergen data may be missing, incomplete, incorrect, or out of date. Always check the actual packaging.</p>}

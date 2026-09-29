@@ -3,7 +3,7 @@ import { PRODUCT_PREFERENCE_IDS, PREFERENCE_IMPORTANCE } from "@/lib/types";
 import type { HealthInfo, ProductPreferenceId, ProductPreferences } from "@/lib/types";
 
 const labels = Object.fromEntries(PREFERENCE_GROUPS.flatMap(g => g.attributes.map(a => [a.id, a.label])));
-const weights = { not_important: 0, important: 1, very_important: 2, mandatory: 4 };
+const importanceOrder = ["not_important", "important", "very_important", "mandatory"] as const;
 
 export function sanitizeProductPreferences(value: unknown): ProductPreferences {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -17,12 +17,11 @@ export function evaluateProductPreferences(
   health: HealthInfo,
   preferences: ProductPreferences = {},
 ) {
-  let sum = 0, total = 0;
+  const matchesByImportance = Object.fromEntries(importanceOrder.map((level) => [level, 0])) as Record<(typeof importanceOrder)[number], number>;
   const matches: string[] = [], unknown: string[] = [], unmet: string[] = [], failedMandatory: string[] = [];
   for (const id of PRODUCT_PREFERENCE_IDS) {
     const importance = preferences[id] ?? "not_important";
-    const weight = weights[importance];
-    if (!weight) continue;
+    if (importance === "not_important") continue;
     const attribute = health.attributes?.[id];
     if (attribute?.status === "not-applicable") continue;
     const known = attribute?.status === "known" &&
@@ -32,12 +31,13 @@ export function evaluateProductPreferences(
     // OFF's own product-search.js classifies mandatory matches <=50 as
     // "may_not_match" or "does_not_match", irrespective of attribute type.
     const matchesRequirement = known && score > 50;
-    total += weight;
-    sum += score * weight;
     if (!known) unknown.push(labels[id]);
-    else if (matchesRequirement) matches.push(labels[id]);
+    else if (matchesRequirement) {
+      matches.push(labels[id]);
+      matchesByImportance[importance] += 1;
+    }
     else unmet.push(labels[id]);
     if (importance === "mandatory" && !matchesRequirement) failedMandatory.push(labels[id]);
   }
-  return { active: total > 0, score: total ? Math.round(sum / total) : 50, matches, unknown, unmet, failedMandatory };
+  return { active: matches.length + unknown.length + unmet.length > 0, matches, matchesByImportance, unknown, unmet, failedMandatory };
 }

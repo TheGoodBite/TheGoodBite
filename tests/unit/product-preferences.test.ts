@@ -17,12 +17,13 @@ describe("product attribute importance", () => {
       }
     },
   );
-  it("weights very important twice as much without silently excluding soft conflicts", () => {
+  it("reports preference matches by importance without silently excluding soft conflicts", () => {
     const h = health({ nutriscore: { status: "known", match: 100 }, nova: { status: "known", match: 0 } });
     const important = evaluateProductPreferences(h, { nutriscore: "important", nova: "important" });
     const very = evaluateProductPreferences(h, { nutriscore: "very_important", nova: "important" });
-    expect(important.score).toBe(50);
-    expect(very.score).toBe(67);
+    expect(important.matchesByImportance.important).toBe(1);
+    expect(very.matchesByImportance.very_important).toBe(1);
+    expect(very.matchesByImportance.important).toBe(0);
     expect(very.failedMandatory).toEqual([]);
   });
   it("requires full absence evidence for allergens; traces never meet mandatory", () => {

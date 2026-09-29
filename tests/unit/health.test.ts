@@ -1,48 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { scoreHealth, classifyHealth, hasNutritionInfo, UNKNOWN_HEALTH } from "@/lib/health";
+import { classifyHealth, hasNutritionInfo, UNKNOWN_HEALTH } from "@/lib/health";
 import type { HealthInfo } from "@/lib/types";
 
 function makeHealth(overrides: Partial<HealthInfo>): HealthInfo {
   return { ...UNKNOWN_HEALTH, ...overrides };
 }
-
-describe("scoreHealth", () => {
-  it("gives 100 for nutri-score A", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "a" }))).toBe(100);
-  });
-
-  it("gives 75 for nutri-score B", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "b" }))).toBe(75);
-  });
-
-  it("gives 50 for nutri-score C", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "c" }))).toBe(50);
-  });
-
-  it("gives 25 for nutri-score D", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "d" }))).toBe(25);
-  });
-
-  it("gives 0 for nutri-score E", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "e" }))).toBe(0);
-  });
-
-  it("gives 0 for unknown nutri-score", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "unknown" }))).toBe(0);
-  });
-
-  it("keeps Nutri-Score as the primary signal and ranks NOVA 4 secondarily", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "a", novaGroup: 1 }))).toBe(100);
-    expect(scoreHealth(makeHealth({ nutriScore: "a", novaGroup: 4 }))).toBe(90);
-    expect(scoreHealth(makeHealth({ nutriScore: "a", novaGroup: 4 }))).toBeGreaterThan(
-      scoreHealth(makeHealth({ nutriScore: "b", novaGroup: 1 })),
-    );
-  });
-
-  it("returns 0 for fully unknown health", () => {
-    expect(scoreHealth(UNKNOWN_HEALTH)).toBe(0);
-  });
-});
 
 describe("classifyHealth", () => {
   it("classifies as strict for A + NOVA <= 3", () => {
@@ -92,6 +54,11 @@ describe("classifyHealth", () => {
     expect(h.nutrition.protein100g).toBe(12);
     expect(h.nutrition.sugars100g).toBe(4);
     expect(h.nutrition.sodium100g).toBe(0.2);
+  });
+
+  it("preserves Open Food Facts numeric Nutri-Score", () => {
+    const h = classifyHealth({ nutriScore: "a", nutriScoreScore: -7, confidence: "high" });
+    expect(h.nutriScoreScore).toBe(-7);
   });
 });
 

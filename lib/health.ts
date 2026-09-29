@@ -13,6 +13,7 @@ export const UNKNOWN_HEALTH: HealthInfo = {
 
 export function classifyHealth(input: {
   nutriScore?: string | null;
+  nutriScoreScore?: number | null;
   novaGroup?: number | null;
   confidence: HealthInfo["confidence"];
   nutrition?: HealthInfo["nutrition"];
@@ -39,6 +40,9 @@ export function classifyHealth(input: {
 
   return {
     nutriScore,
+    nutriScoreScore: Number.isFinite(input.nutriScoreScore)
+      ? input.nutriScoreScore ?? undefined
+      : undefined,
     novaGroup,
     classification,
     confidence: input.confidence,
@@ -50,21 +54,6 @@ export function classifyHealth(input: {
     categoriesTags: input.categoriesTags ?? [],
     allergensTags: input.allergensTags ?? [],
   };
-}
-
-export function scoreHealth(health: HealthInfo) {
-  // Keep the nutrition grade as the primary signal. Processing level is a
-  // secondary adjustment and must not make a lower Nutri-Score grade win.
-  const gradeScores: Record<HealthInfo["nutriScore"], number> = {
-    a: 100,
-    b: 75,
-    c: 50,
-    d: 25,
-    e: 0,
-    unknown: 0,
-  };
-  const gradeScore = gradeScores[health.nutriScore];
-  return Math.max(0, gradeScore - (health.novaGroup === 4 ? 10 : 0));
 }
 
 export function hasNutritionInfo(health?: HealthInfo | null): boolean {

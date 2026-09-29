@@ -25,6 +25,7 @@ export type OffProduct = {
   quantity?: string;
   countries_tags?: string[];
   nutriscore_grade?: string;
+  nutriscore_score?: number;
   nova_group?: number;
   nutriments?: Record<string, number | string>;
   serving_size?: string;
@@ -39,7 +40,7 @@ export type OffProduct = {
   attribute_groups_en?: { attributes?: { id?: string; status?: string; match?: number; title?: string }[] }[];
 };
 const FIELDS =
-  "code,product_name,brands,quantity,countries_tags,nutriscore_grade,nova_group,nutriments,serving_size,ingredients_text,labels_tags,categories_tags,allergens_tags,traces_tags,image_front_url,image_url,ingredients_tags,attribute_groups_en";
+  "code,product_name,brands,quantity,countries_tags,nutriscore_grade,nutriscore_score,nova_group,nutriments,serving_size,ingredients_text,labels_tags,categories_tags,allergens_tags,traces_tags,image_front_url,image_url,ingredients_tags,attribute_groups_en";
 const unknown = (availability: "no_match" | "unavailable"): HealthInfo => ({
   ...UNKNOWN_HEALTH,
   availability,
@@ -114,6 +115,7 @@ export function fromOffProduct(
   };
   const health = classifyHealth({
     nutriScore: product.nutriscore_grade,
+    nutriScoreScore: product.nutriscore_score,
     novaGroup: product.nova_group,
     confidence: match === "text" ? "medium" : "high",
     nutrition: {
@@ -189,11 +191,11 @@ async function getByBarcode(code: string) {
     },
   );
 }
-export async function searchCatalog(query: string, preferences: CatalogPreferences = {}) {
+export async function searchCatalog(query: string, preferences: CatalogPreferences = {}, page = 1) {
   const filters = offSearchParameters(preferences);
-  const queryHash = await sha256(JSON.stringify([normalizeQuery(query), filters.toString()]));
+  const queryHash = await sha256(JSON.stringify([normalizeQuery(query), filters.toString(), page]));
   return getOrSet<OffProduct[]>(
-    `off:v6:us-search:${queryHash}`,
+    `off:v7:us-search:${queryHash}`,
     86400,
     async () => {
       await reserveBudget("off:search", 10, 60000);
@@ -206,6 +208,7 @@ export async function searchCatalog(query: string, preferences: CatalogPreferenc
         action: "process",
         json: "1",
         page_size: "50",
+        page: String(page),
         tagtype_0: "countries",
         tag_contains_0: "contains",
         tag_0: "united-states",

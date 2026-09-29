@@ -32,33 +32,6 @@ export function NutriScoreBadge({ product }: { product: RankedProduct }) {
   );
 }
 
-export function ScoreBadge({
-  product,
-  large = false,
-}: {
-  product: RankedProduct;
-  large?: boolean;
-}) {
-  const unknown = product.health.classification === "unknown";
-  const tone = unknown
-    ? "neutral"
-    : product.overallScore >= 80
-      ? "good"
-      : product.overallScore >= 55
-        ? "mixed"
-        : "low";
-  return (
-    <span
-      className={`score score-${tone} ${large ? "score-large" : ""}`}
-      title="Match score: nutrition, relevance, price, and preferences"
-      aria-label={`Match score ${product.overallScore} out of 100`}
-    >
-      {Math.round(product.overallScore)}
-      {large && <small>/100</small>}
-    </span>
-  );
-}
-
 export function priceLabel(product: RankedProduct) {
   return product.estimatedPrice === null
     ? "Price unknown"

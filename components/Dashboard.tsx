@@ -38,7 +38,8 @@ import { consumeSearch } from "@/lib/searchStream";
 import { normalizeQuery } from "@/lib/utils";
 import { MeezanyLogo } from "./MeezanyLogo";
 import { Sheet } from "./Sheet";
-import { ProductImage, ProductPrice, NutriScoreBadge, ScoreBadge, priceLabel } from "./ProductPresentation";
+import { ProductImage, ProductPrice, NutriScoreBadge, priceLabel } from "./ProductPresentation";
+import { compareNutriScore, comparePrice } from "@/lib/scoring";
 import { ProductDetail } from "./ProductDetail";
 
 const DIET_LABELS: Record<DietMode, string> = {
@@ -451,18 +452,21 @@ export default function Dashboard() {
       setMessage("Purchase recorded.");
     });
   }
-  const options = [
+  const optionResults = [
     ...(results.find(
       (row) => normalizeQuery(row.query) === normalizeQuery(optionQuery),
     )?.options || []),
-  ].sort((a, b) =>
+  ];
+  const options =
     sort === "price"
-      ? (a.estimatedPrice ?? Infinity) - (b.estimatedPrice ?? Infinity)
+      ? [...optionResults].sort(
+          (a, b) => comparePrice(a, b) || compareNutriScore(a.health, b.health),
+        )
       : sort === "nutrition"
-        ? (b.health.classification === "unknown" ? -1 : b.scoreParts.health) -
-          (a.health.classification === "unknown" ? -1 : a.scoreParts.health)
-        : b.overallScore - a.overallScore,
-  );
+        ? [...optionResults].sort(
+            (a, b) => compareNutriScore(a.health, b.health) || comparePrice(a, b),
+          )
+        : optionResults;
   const detail = selection && (
     <ProductDetail
       key={productKey(selection.product)}
@@ -781,8 +785,8 @@ export default function Dashboard() {
                           <span className="error-text">{result.error}</span>
                         ) : best ? (
                           <>
-                            Best match · <ProductPrice product={best} />{" "}
-                            <ScoreBadge product={best} />
+                            Top pick · <ProductPrice product={best} /> ·{" "}
+                            <NutriScoreBadge product={best} />
                           </>
                         ) : result ? (
                           result.emptyReason === "nutrition_unavailable" ? (
@@ -1262,10 +1266,14 @@ export default function Dashboard() {
               <select value={sort} onChange={(e) => setSort(e.target.value)}>
                 <option value="match">Best match</option>
                 <option value="price">Lowest price</option>
-                <option value="nutrition">Nutrition score</option>
+                <option value="nutrition">Nutri-Score</option>
               </select>
             </label>
           </div>
+          <p className="sort-explanation">
+            Best match orders by Open Food Facts category fit, Nutri-Score,
+            product name/brand match, selected preferences and diet modes, bulk preference, then comparable unit price.
+          </p>
           {stale && (
             <p className="notice">
               Search again to apply your updated preferences.
@@ -1282,10 +1290,6 @@ export default function Dashboard() {
                   <ProductImage product={product} />
                 </div>
                 <NutriScoreBadge product={product} />
-                <div>
-                  <ScoreBadge product={product} />
-                  <small> Match score</small>
-                </div>
                 <h3>{product.title}</h3>
                 <p>{product.packageSize || "Size unavailable"}</p>
                 <strong><ProductPrice product={product} /></strong>

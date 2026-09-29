@@ -35,7 +35,7 @@ This README preserves the full product vision alongside current implementation s
 
 For every grocery item: product photos, health/nutrition information, useful facts such as spicy, organic, sweeteners, or bulk, estimated prices, servings, and size. Absence of an organic tag is not evidence that a product is non-organic.
 
-Support cheapest-first and healthiest-first sorting. The long-term health score should be relative to the product category: cheese should be meaningfully compared with other cheeses. Keep the overall match score separate, because price and relevance are not nutrition.
+Support cheapest-first and Nutri-Score-first sorting. Use the Open Food Facts A–E grade instead of inventing a combined health or match score; keep query fit, selected preferences, nutrition grade, and price visible as separate signals.
 
 Click a card for expanded tags, full nutrition with favorable/less favorable signals, ingredients, and price per serving when supported by real serving information. Never invent missing values or assume a package count is a serving count.
 
@@ -84,7 +84,7 @@ Next.js App Router, React, TypeScript, Tailwind CSS, Cloudflare Workers via Open
 
 Open Food Facts country tags restrict discovery to products marked as sold in the US; they do not confirm local inventory or country of manufacture. Optional ZIP filters Open Prices observations. A price is shown only for an exact barcode with a recent USD observation at a US location, preferably ZIP-matched when supplied, otherwise matched to the same state. Otherwise it stays unknown. Catalog and price coverage are incomplete; no Shopping fallback is used.
 
-`overallScore` blends relevance, price, nutrition, and preferences: label it Match score. See `lib/scoring.ts`, `lib/health.ts`, and `lib/dietModes.ts` for the actual algorithm. Design-example numbers are not scoring specifications.
+There is no combined 0–100 match score. Best match uses a readable ordering: Open Food Facts category fit, Nutri-Score grade and numeric score, product name/brand match, selected preference matches and diet modes, bulk preference, then comparable unit price. Mandatory preferences remain filters. Missing Nutri-Scores remain explicitly unknown. See `lib/scoring.ts`.
 
 ## Local Setup
 

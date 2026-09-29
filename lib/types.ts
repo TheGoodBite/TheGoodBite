@@ -111,6 +111,7 @@ export type ProductCandidate = {
   providerProductId: string;
   title: string;
   brand?: string;
+  categoryTags?: string[];
   imageUrl?: string;
   estimatedPrice: number | null;
   packageSize?: string;
@@ -129,6 +130,7 @@ export type ProductCandidate = {
 
 export type HealthInfo = {
   nutriScore: "a" | "b" | "c" | "d" | "e" | "unknown";
+  nutriScoreScore?: number;
   novaGroup: number | null;
   classification: "strict" | "fallback" | "unknown" | "unhealthy";
   confidence: "high" | "medium" | "low";
@@ -170,19 +172,11 @@ export type DietFit = {
 };
 
 export type RankedProduct = ProductCandidate & {
-  overallScore: number;
-  scoreParts: {
-    relevance: number;
-    price: number;
-    health: number;
-    diet: number;
-    history: number;
-  };
   health: HealthInfo;
   dietFit: DietFit;
   explanation: string;
   allergyStatus?: "conflict" | "unknown" | "not_detected";
-  preferenceFit?: { score: number; matches: string[]; unknown: string[]; unmet?: string[] };
+  preferenceFit?: { matches: string[]; unknown: string[]; unmet?: string[] };
 };
 
 export type SearchProductsRequest = {
