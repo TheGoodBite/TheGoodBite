@@ -1,7 +1,9 @@
 # Cloudflare hosting migration
 
-Hosting only: retain Next.js, the UI, all API routes, Supabase, Upstash, Stripe,
+Hosting only: retain Next.js, the UI, all API routes, Supabase, Upstash,
 and the existing food providers. No catalog import or database changes.
+Stripe is not set up yet; its existing routes remain unconfigured and need no
+credentials for this migration.
 Netlify remains available for rollback until the Cloudflare deployment is verified.
 
 ## Build and deployment
@@ -36,7 +38,7 @@ The existing UI uses ordinary image elements, not Next image optimization.
 ## Variables
 
 Cloudflare build variables and Worker runtime variables are separate settings.
-The five `NEXT_PUBLIC_*` values below must be present at build time and match
+The three `NEXT_PUBLIC_*` values below must be present at build time and match
 the runtime settings. Changing them requires rebuilding, not just redeploying.
 
 | Name | Build | Runtime | Value |
@@ -72,26 +74,21 @@ subdomain in Workers & Pages. Do not use a literal placeholder.
    callback solely because the frontend host changed.
 3. Verify Google login, logout, list create/edit/delete, purchase history,
    ownership restrictions, preferences, and streamed multi-item search results.
-4. Use a dedicated test user for Stripe testing: webhook handlers update profiles
-   in the configured Supabase database. Set test-mode prices and key together.
-   Create a test webhook at `<test-origin>/api/stripe/webhook` for
-   `checkout.session.completed`, `customer.subscription.updated`, and
-   `customer.subscription.deleted`. Use that endpoint's signing secret.
-5. Verify checkout and billing portal return URLs and subscription updates.
-6. Verify product images, static files, error responses, and provider timeout behavior.
+4. Stripe checkout and webhook routes should remain unconfigured. No Stripe
+   account, keys, prices, or webhook setup is needed for this hosting migration.
+5. Verify product images, static files, error responses, and provider timeout behavior.
+
+When Stripe is added later, configure its keys, price IDs, and webhook endpoint as a
+separate change; then test checkout and subscription updates using a dedicated test user.
 
 Local build/unit checks cannot verify external account credentials or live OAuth.
 
 ## Cutover and rollback
 
-After acceptance, configure the production domain, production site URL and matching
-live Stripe credentials/prices; rebuild. If the public domain stays the same,
-the public webhook URL can stay the same. If it changes, configure the new live
-webhook endpoint and its signing secret. Avoid enabling duplicate live endpoints
-without accounting for duplicate event delivery.
+After acceptance, configure the production domain and production site URL, then rebuild.
 
 Switch DNS/routing only when the Worker is ready. Verify HTTPS, login, search,
-lists and payments on the final domain before retiring Netlify. Switch the build
+and lists on the final domain before retiring Netlify. Switch the build
 branch to `main` after merging. Preserve the old Netlify deployment and its settings
 for rollback; restore the previous routing and any changed auth/webhook settings
 if needed. No database rollback is required because this PR changes no schema.
