@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import type Stripe from "stripe";
+import Stripe from "stripe";
 import { handleRouteError } from "@/lib/api";
 import { getStripe } from "@/lib/stripe";
 import { requireAdminSupabase } from "@/lib/supabase";
@@ -14,7 +14,9 @@ export async function POST(request: Request) {
     const signature = (await headers()).get("stripe-signature");
     if (!signature) return Response.json({ error: "Missing Stripe signature." }, { status: 400 });
 
-    const event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    const event = await stripe.webhooks.constructEventAsync(
+      body, signature, webhookSecret, undefined, Stripe.createSubtleCryptoProvider(),
+    );
     await handleStripeEvent(event);
 
     return Response.json({ received: true });
