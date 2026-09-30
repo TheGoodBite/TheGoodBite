@@ -22,7 +22,8 @@ export function ProductImage({ product }: { product: RankedProduct }) {
 }
 
 export function NutriScoreBadge({ product }: { product: RankedProduct }) {
-  const grade = product.health.nutriScore;
+  const rawGrade = product.health.nutriScore;
+  const grade = ["a", "b", "c", "d", "e"].includes(rawGrade) ? rawGrade : "unknown";
   const label = grade === "unknown" ? "Nutri-Score unavailable" : `Nutri-Score ${grade.toUpperCase()}`;
   return (
     <span className={`nutri-score nutri-score-${grade}`} title={label} aria-label={label}>
@@ -33,9 +34,9 @@ export function NutriScoreBadge({ product }: { product: RankedProduct }) {
 }
 
 export function priceLabel(product: RankedProduct) {
-  return product.estimatedPrice === null
+  return !Number.isFinite(product.estimatedPrice)
     ? "Price unknown"
-    : `$${product.estimatedPrice.toFixed(2)}`;
+    : `$${product.estimatedPrice!.toFixed(2)}`;
 }
 
 export function priceLocationExplanation(product: RankedProduct) {

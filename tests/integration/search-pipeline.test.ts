@@ -136,6 +136,20 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
     const row = (await json({ items: ["yogurt"] })).items[0];
     expect(row.options).toEqual([]);
     expect(row.emptyReason).toBe("nutrition_unavailable");
+    expect(calls).toHaveLength(2);
+  });
+  it("recovers one transient catalog failure without a user clicking again", async () => {
+    let attempts = 0;
+    override = (url) => url.hostname === "world.openfoodfacts.org" && ++attempts === 1
+      ? new Response("temporary failure", { status: 503 }) : providers(url);
+    const row = (await json({ items: ["yogurt"] })).items[0];
+    expect(row.options).toHaveLength(1);
+    expect(attempts).toBe(2);
+  });
+  it("does not retry upstream rate limits", async () => {
+    override = () => new Response("limited", { status: 429 });
+    const row = (await json({ items: ["yogurt"] })).items[0];
+    expect(row.emptyReason).toBe("nutrition_unavailable");
     expect(calls).toHaveLength(1);
   });
   it("excludes dairy conflicts before any price requests", async () => {
@@ -371,7 +385,7 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
     const row = (await json({ items: ["yogurt"], productPreferences: { low_fat: "mandatory" } })).items[0];
     expect(row.options).toEqual([]);
     expect(row.emptyReason).toBe("nutrition_unavailable");
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
   });
   it("does not spend price calls when all mandatory evidence is missing", async () => {
     const row = (await json({ items: ["yogurt"], productPreferences: { forest_footprint: "mandatory" } })).items[0];

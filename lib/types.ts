@@ -128,6 +128,18 @@ export type ProductCandidate = {
   raw?: unknown;
 };
 
+export type NutritionAmounts = {
+  protein?: number;
+  sugars?: number;
+  carbohydrates?: number;
+  sodium?: number;
+  salt?: number;
+  fiber?: number;
+  energyKcal?: number;
+  saturatedFat?: number;
+  fat?: number;
+};
+
 export type HealthInfo = {
   nutriScore: "a" | "b" | "c" | "d" | "e" | "unknown";
   nutriScoreScore?: number;
@@ -145,6 +157,9 @@ export type HealthInfo = {
     saturatedFat100g?: number;
     fat100g?: number;
   };
+  nutritionPerServing?: NutritionAmounts;
+  servingQuantity?: number;
+  nutrientLevels?: Partial<Record<"fat" | "saturated-fat" | "sugars" | "salt", "low" | "moderate" | "high">>;
   source?: {
     provider: "open_food_facts";
     barcode?: string;

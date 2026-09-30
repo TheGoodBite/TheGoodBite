@@ -1,12 +1,16 @@
 import type { SearchEvent, SearchProductsResponse } from "@/lib/types";
 
+export class SearchResponseError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+}
+
 export async function consumeSearch(
   response: Response,
   onEvent: (event: SearchEvent) => void,
 ) {
   if (!response.ok) {
-    const data = await response.json();
-    throw new Error(data.error || "Search failed. Please try again.");
+    const data = await response.json().catch(() => ({}));
+    throw new SearchResponseError(data.error || "Search failed. Please try again.", response.status);
   }
   if (!response.headers.get("content-type")?.includes("application/x-ndjson")) {
     const data: SearchProductsResponse = await response.json();
@@ -49,5 +53,36 @@ export async function consumeSearch(
   } finally {
     await reader.cancel().catch(() => {});
     reader.releaseLock();
+  }
+}
+
+// Recover one interrupted stream without refetching successful or genuinely empty items.
+export async function searchWithRecovery(input: {
+  queries: string[];
+  signal: AbortSignal;
+  request: (queries: string[]) => Promise<Response>;
+  onEvent: (event: SearchEvent) => void;
+  onRetry?: () => void;
+}) {
+  let remaining = [...input.queries];
+  for (let attempt = 0; ; attempt++) {
+    input.signal.throwIfAborted();
+    const completed = new Set<string>();
+    try {
+      await consumeSearch(await input.request(remaining), (event) => {
+        if (event.type === "item") completed.add(event.item.query);
+        input.onEvent(event);
+      });
+      // A done marker without an item is also an incomplete response.
+      if (remaining.some((query) => !completed.has(query)))
+        throw new Error("Search did not finish for every item.");
+      return;
+    } catch (error) {
+      input.signal.throwIfAborted();
+      remaining = remaining.filter((query) => !completed.has(query));
+      if (!remaining.length) return;
+      if (attempt || (error instanceof SearchResponseError && error.status < 500)) throw error;
+      input.onRetry?.();
+    }
   }
 }

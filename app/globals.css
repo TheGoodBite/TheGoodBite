@@ -1580,3 +1580,9 @@ button:focus-visible .price-tooltip {
 .product-preferences section + section { margin-top: 24px; }
 .product-preferences .fine-print { margin: 10px 0; }
 .product-preferences textarea { margin-top: 8px; }
+
+.nutrition-explanation { margin: 12px 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.nutrition-explanation summary { cursor: pointer; font-weight: 600; color: var(--ink); }
+.nutrition-explanation p { margin-top: 8px; }
+.facts-heading label { font-size: 12px; }
+.facts-heading select { max-width: 160px; padding: 5px; border: 1px solid #ddd; border-radius: 6px; background: white; color: #222; }

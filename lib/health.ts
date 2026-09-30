@@ -99,6 +99,7 @@ export function hasVerifiedNutritionFacts(health?: HealthInfo | null): boolean {
     n.saturatedFat100g,
     n.sodium100g,
     n.fiber100g,
+    ...Object.values(health.nutritionPerServing ?? {}),
   ].some(
     (value) =>
       typeof value === "number" && Number.isFinite(value) && value >= 0,

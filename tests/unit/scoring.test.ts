@@ -124,6 +124,23 @@ describe("transparent product ordering", () => {
     ]);
   });
 
+  it("keeps a named cereal above oats in the same broad category", () => {
+    const oats = makeCandidate({ id: "oats", title: "Rolled Oats", categoryTags: ["en:breakfast-cereals"] });
+    const cereal = makeCandidate({ id: "cereal", title: "Wholegrain Cereal", categoryTags: ["en:breakfast-cereals"] });
+    const ranked = rankProducts({ query: "cereal", candidates: [oats, cereal], healthById: new Map([
+      ["oats", { ...UNKNOWN_HEALTH, nutriScore: "a" }], ["cereal", { ...UNKNOWN_HEALTH, nutriScore: "b" }],
+    ]), dietModes: [], limit: 2 });
+    expect(ranked[0].providerProductId).toBe("cereal");
+  });
+
+  it("prefers peanuts to peanut powder despite an inherited peanuts category", () => {
+    const peanuts = makeCandidate({ id: "nuts", title: "Salted Peanuts", categoryTags: ["en:peanuts"] });
+    const powder = makeCandidate({ id: "powder", title: "Peanut Powder", categoryTags: ["en:peanuts", "en:peanut-butter-powder"] });
+    expect(rankProducts({ query: "peanuts", candidates: [powder, peanuts], healthById: new Map([
+      ["nuts", { ...UNKNOWN_HEALTH, nutriScore: "c" }], ["powder", { ...UNKNOWN_HEALTH, nutriScore: "a" }],
+    ]), dietModes: [], limit: 2 })[0].providerProductId).toBe("nuts");
+  });
+
   it("uses Nutri-Score before soft preferences and filters failed mandatory preferences", () => {
     const veganC = makeCandidate({ id: "vegan-c", title: "Cereal" });
     const nonVeganA = makeCandidate({ id: "not-vegan-a", title: "Cereal" });

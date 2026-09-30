@@ -84,7 +84,9 @@ Next.js App Router, React, TypeScript, Tailwind CSS, Cloudflare Workers via Open
 
 Open Food Facts country tags restrict discovery to products marked as sold in the US; they do not confirm local inventory or country of manufacture. Optional ZIP filters Open Prices observations. A price is shown only for an exact barcode with a recent USD observation at a US location, preferably ZIP-matched when supplied, otherwise matched to the same state. Otherwise it stays unknown. Catalog and price coverage are incomplete; no Shopping fallback is used.
 
-There is no combined 0–100 match score. Best match uses a readable ordering: Open Food Facts category fit, Nutri-Score grade and numeric score, product name/brand match, selected preference matches and diet modes, bulk preference, then comparable unit price. Mandatory preferences remain filters. Missing Nutri-Scores remain explicitly unknown. See `lib/scoring.ts`.
+There is no combined 0–100 match score. Recommended uses a readable ordering: Open Food Facts category fit, product name/brand relevance, Nutri-Score grade and numeric score, selected preference matches and diet modes, bulk preference, then comparable unit price. Mandatory preferences remain filters. Missing Nutri-Scores remain explicitly unknown. See `lib/scoring.ts`.
+
+Product details default to per-serving facts when the catalog provides serving nutrients or an explicit serving quantity, with a standard-basis comparison toggle. Missing portions stay unknown. Nutri-Score remains the OFF nutrition grade, with an explanation and OFF nutrient levels shown separately from processing and preferences. Catalog timeouts, 5xx failures and incomplete responses receive one automatic retry; valid empty results and rate limits are not retried. Every retry uses the shared provider budget.
 
 ## Local Setup
 

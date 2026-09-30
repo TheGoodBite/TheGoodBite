@@ -88,11 +88,12 @@ export function rankProducts(input: {
         dietFit: { ...dietFit, warnings },
         allergyStatus,
         explanation:
-          "Ordered by Open Food Facts category fit, Nutri-Score, product name/brand match, selected preferences and diet modes, bulk preference, then comparable unit price. No combined match score is calculated.",
+          "Ordered by Open Food Facts category fit and product name/brand match, then Nutri-Score, selected preferences and diet modes, bulk preference, then comparable unit price. No combined match score is calculated.",
       };
       return {
         ranked,
         relevance: scoreRelevance(input.query, candidate),
+        nameHeadMatch: sameWord(words(input.query).at(-1), words(candidate.title).at(-1)),
         categoryRelevance: scoreCategoryRelevance(input.query, candidate.categoryTags),
         preferenceFit,
         dietFit,
@@ -114,25 +115,23 @@ export function rankProducts(input: {
         : 0;
       const dietOrder =
         b.dietFit.matchedModes.length - a.dietFit.matchedModes.length;
-      const bulkOrder =
-        a.bulkPreference === "any" || b.bulkPreference === "any"
-          ? 0
-          : a.bulkPreference === b.bulkPreference
-            ? 0
-            : a.bulkPreference === "bulk"
-              ? Number(!!b.ranked.package?.bulk) - Number(!!a.ranked.package?.bulk)
-              : Number(!!a.ranked.package?.bulk) - Number(!!b.ranked.package?.bulk);
+      const bulkOrder = a.bulkPreference === "any" ? 0
+        : a.bulkPreference === "bulk"
+          ? Number(!!b.ranked.package?.bulk) - Number(!!a.ranked.package?.bulk)
+          : Number(!!a.ranked.package?.bulk) - Number(!!b.ranked.package?.bulk);
       const categoryOrder = compareCategoryRelevance(
         a.categoryRelevance,
         b.categoryRelevance,
       );
-      const noCategoryEvidence =
-        a.categoryRelevance == null && b.categoryRelevance == null;
+      const matchTier = (item: typeof a) =>
+        item.categoryRelevance?.headMatch || item.relevance === 100 ? 2
+          : item.categoryRelevance || item.relevance > 0 ? 1 : 0;
       return (
+        matchTier(b) - matchTier(a) ||
         categoryOrder ||
-        (noCategoryEvidence ? b.relevance - a.relevance : 0) ||
+        b.relevance - a.relevance ||
+        Number(b.nameHeadMatch) - Number(a.nameHeadMatch) ||
         compareNutriScore(a.ranked.health, b.ranked.health) ||
-        (!noCategoryEvidence ? b.relevance - a.relevance : 0) ||
         preferenceOrder ||
         dietOrder ||
         bulkOrder ||
@@ -142,6 +141,10 @@ export function rankProducts(input: {
     })
     .slice(0, input.limit)
     .map(({ ranked }) => ranked);
+}
+
+function sameWord(a?: string, b?: string) {
+  return !!a && !!b && (a === b || a === `${b}s` || b === `${a}s`);
 }
 
 function compareCategoryRelevance(
@@ -189,17 +192,17 @@ function scoreCategoryRelevance(query: string, categoryTags?: string[]) {
       coverage: hits / Math.max(terms.length, category.length),
     };
   });
-  return categories.sort(
+  return categories.filter((category) => category.coverage > 0).sort(
     (a, b) => Number(b.headMatch) - Number(a.headMatch) || b.coverage - a.coverage,
   )[0];
 }
 
 export function compareNutriScore(a: HealthInfo, b: HealthInfo) {
-  const gradeOrder = NUTRI_SCORE_ORDER[a.nutriScore] - NUTRI_SCORE_ORDER[b.nutriScore];
+  const gradeOrder = (NUTRI_SCORE_ORDER[a.nutriScore] ?? 5) - (NUTRI_SCORE_ORDER[b.nutriScore] ?? 5);
   if (gradeOrder) return gradeOrder;
   const aScore = a.nutriScoreScore;
   const bScore = b.nutriScoreScore;
-  return aScore != null && bScore != null ? aScore - bScore : 0;
+  return Number.isFinite(aScore) && Number.isFinite(bScore) ? aScore! - bScore! : 0;
 }
 
 export function comparePrice(a: ProductCandidate, b: ProductCandidate) {

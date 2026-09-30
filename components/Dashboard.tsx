@@ -34,7 +34,7 @@ import {
   type SearchProductsResponse,
 } from "@/lib/types";
 import { ALLERGEN_DETAILS } from "@/lib/allergens";
-import { consumeSearch } from "@/lib/searchStream";
+import { searchWithRecovery } from "@/lib/searchStream";
 import { normalizeQuery } from "@/lib/utils";
 import { MeezanyLogo } from "./MeezanyLogo";
 import { Sheet } from "./Sheet";
@@ -330,56 +330,64 @@ export default function Dashboard() {
     setSearchedPreferences(preferenceKey);
     setMessage("");
     if (!incremental) setSelection(null);
+    const completedQueries = new Set<string>();
     try {
-      const response = await fetch("/api/search-products", {
-        method: "POST",
+      await searchWithRecovery({
+        queries,
         signal: controller.signal,
-        headers: {
-          accept: "application/x-ndjson",
-          "content-type": "application/json",
-          authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          items: queries,
-          productPreferences,
-          unwantedIngredients,
-          dietModes,
-          allergies,
-          bulkPreference,
-          zipCode: zipCode || undefined,
-          limitPerItem: 10,
+        onRetry: () => setMessage("Connection interrupted. Retrying unfinished items…"),
+        request: (retryQueries) => fetch("/api/search-products", {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            accept: "application/x-ndjson",
+            "content-type": "application/json",
+            authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            items: retryQueries,
+            productPreferences,
+            unwantedIngredients,
+            dietModes,
+            allergies,
+            bulkPreference,
+            zipCode: zipCode || undefined,
+            limitPerItem: 10,
         }),
-      });
-      await consumeSearch(response, (event) => {
-        if (controller.signal.aborted || requestRef.current !== controller)
-          return;
-        if (event.type === "meta") setMessage(event.disclaimer);
-        if (event.type === "item") {
-          const key = normalizeQuery(event.item.query);
-          if (removedQueries.current.has(key)) return;
-          setResults((current) =>
-            current.map((row) =>
-              normalizeQuery(row.query) === key ? event.item : row,
-            ),
-          );
-          setPendingQueries((current) =>
-            current.filter((query) => query !== key),
-          );
-          if (event.item.options.length)
-            setSelection(
-              (current) =>
-                current ?? {
-                  query: event.item.query,
-                  product: event.item.options[0],
-                },
+        }),
+        onEvent: (event) => {
+          if (controller.signal.aborted || requestRef.current !== controller)
+            return;
+          if (event.type === "meta") setMessage(event.disclaimer);
+          if (event.type === "item") {
+            const key = normalizeQuery(event.item.query);
+            completedQueries.add(key);
+            if (removedQueries.current.has(key)) return;
+            setResults((current) =>
+              current.map((row) =>
+                normalizeQuery(row.query) === key ? event.item : row,
+              ),
             );
-        }
+            setPendingQueries((current) =>
+              current.filter((query) => query !== key),
+            );
+            if (event.item.options.length)
+              setSelection(
+                (current) =>
+                  current ?? {
+                    query: event.item.query,
+                    product: event.item.options[0],
+                  },
+              );
+          }
+        },
       });
     } catch (error) {
       if (!controller.signal.aborted) {
         setResults((current) =>
           current.map((row) =>
             queries.includes(normalizeQuery(row.query)) &&
+            !completedQueries.has(normalizeQuery(row.query)) &&
             !row.options.length &&
             !row.error
               ? {
@@ -836,6 +844,11 @@ export default function Dashboard() {
                           : "Nutrition · price · preferences"}
                       </span>
                     )}
+                    {!loading && result && !best && (
+                      <button className="secondary-button" onClick={() => void searchProducts([query], true)}>
+                        Try again
+                      </button>
+                    )}
                     {best && (
                       <button
                         className="icon-button row-chevron"
@@ -1264,15 +1277,15 @@ export default function Dashboard() {
             <label>
               Sort{" "}
               <select value={sort} onChange={(e) => setSort(e.target.value)}>
-                <option value="match">Best match</option>
+                <option value="match">Recommended</option>
                 <option value="price">Lowest price</option>
                 <option value="nutrition">Nutri-Score</option>
               </select>
             </label>
           </div>
           <p className="sort-explanation">
-            Best match orders by Open Food Facts category fit, Nutri-Score,
-            product name/brand match, selected preferences and diet modes, bulk preference, then comparable unit price.
+            Recommended orders by category and name relevance, then Nutri-Score,
+            selected preferences and diet modes, bulk preference, then comparable unit price.
           </p>
           {stale && (
             <p className="notice">
