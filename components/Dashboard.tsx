@@ -1,5 +1,6 @@
 "use client";
 
+import { useGroceryDraft } from "@/lib/hooks/useGroceryDraft";
 import { PreferenceControls } from "./PreferenceControls";
 import { restoreProductPreferences, EXTRA_DIET_MODES } from "@/lib/preferenceStorage";
 import type { ProductPreferences } from "@/lib/types";
@@ -76,6 +77,7 @@ const productKey = (product: RankedProduct) =>
 export default function Dashboard() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(!supabase);
   const [items, setItems] = useState<string[]>([]);
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const itemIds = useRef<Record<string, string>>({});
@@ -126,14 +128,34 @@ export default function Dashboard() {
   const searching = pendingQueries.length > 0;
   const visibleQueries = quickMode ? results.map((row) => row.query) : items;
 
+  const persistDraft = useGroceryDraft({
+    ownerId: session?.user.id ?? null,
+    authReady,
+    draft: { name, items, input, checked, activeListId, itemIds: itemIds.current },
+    onRestore: (draft) => {
+      requestRef.current?.abort();
+      setPendingQueries([]);
+      setResults([]);
+      setSelection(null);
+      setName(draft.name);
+      setItems(draft.items);
+      setInput(draft.input);
+      setChecked(draft.checked);
+      setActiveListId(draft.activeListId);
+      itemIds.current = draft.itemIds;
+    },
+  });
+
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data, error }) => {
       if (error) setMessage(error.message);
       else setSession(data.session);
+      setAuthReady(true);
     });
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
       setSession(next);
+      setAuthReady(true);
       if (!next) {
         setLists([]);
         setBought([]);
@@ -216,7 +238,7 @@ export default function Dashboard() {
     }
     setItems((current) => [...current, ...additions]);
     setInput("");
-    if (additions.length)
+    if (additions.length && accessToken)
       void searchProducts(
         stale ? [...items, ...additions] : [...pendingQueries, ...additions],
         !stale,
@@ -248,7 +270,7 @@ export default function Dashboard() {
     );
     if (selection && normalizeQuery(selection.query) === key)
       setSelection(null);
-    void searchProducts(
+    if (accessToken) void searchProducts(
       stale
         ? items.map((item) => (item === query ? next : item))
         : [...pendingQueries.filter((item) => item !== key), next],
@@ -1089,6 +1111,7 @@ export default function Dashboard() {
                     disabled={busy}
                     onClick={() =>
                       perform(async () => {
+                        persistDraft();
                         const { error } = await supabase.auth.signInWithOAuth({
                           provider: "google",
                           options: { redirectTo: window.location.origin },
@@ -1104,6 +1127,7 @@ export default function Dashboard() {
                     onSubmit={(e) => {
                       e.preventDefault();
                       void perform(async () => {
+                        persistDraft();
                         const { error } = await supabase.auth.signInWithOtp({
                           email,
                           options: { emailRedirectTo: window.location.origin },

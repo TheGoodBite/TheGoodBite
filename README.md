@@ -58,6 +58,7 @@ Later, people can share recipe photos with ingredient lists that others can add 
 - Open Food Facts product discovery restricted to US-market catalog records with nutrition facts.
 - Exact-barcode Open Prices observations, deterministic health/diet ranking, tags, allergen checks, and beta FODMAP signals.
 - All 29 requested OFF attribute preferences with four importance levels, mandatory evidence filters, ingredient exclusions, and migration of existing selections. Shopping search is no longer used.
+- Browser drafts preserve grocery order, checkoffs, list names and unsubmitted input across reloads and sign-in redirects. Drafts are separated by account; signed-out drafts transfer on sign-in. This is local recovery, not cloud saving.
 - Supabase saved-list and bought-product APIs. Stripe checkout/webhook code is scaffolding only; Stripe is not set up yet.
 - Shared Upstash Redis caching and rolling request/provider budgets; Redis is required for production search.
 
