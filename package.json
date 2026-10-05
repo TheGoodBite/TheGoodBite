@@ -12,9 +12,14 @@
     "test:watch": "VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest",
     "test:unit": "VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest run tests/unit",
     "test:integration": "VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest run tests/integration --exclude '**/*-live.test.ts'",
-    "test:live": "MEEZANY_LIVE_TESTS=1 VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest run tests/integration/providers-live.test.ts"
+    "test:live": "MEEZANY_LIVE_TESTS=1 VITE_CONFIG_NATIVE_IGNORE_WARNING=true vitest run tests/integration/providers-live.test.ts",
+    "build:cloudflare": "opennextjs-cloudflare build",
+    "preview:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy:cloudflare": "opennextjs-cloudflare deploy",
+    "upload:cloudflare": "opennextjs-cloudflare upload"
   },
   "dependencies": {
+    "@opennextjs/cloudflare": "^1.20.6",
     "@supabase/supabase-js": "^2.80.0",
     "@upstash/redis": "^1.35.8",
     "clsx": "^2.1.1",
@@ -31,8 +36,10 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.1.0",
+    "esbuild": "^0.27.7",
     "tailwindcss": "^4.1.17",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.8"
+    "vitest": "^4.0.8",
+    "wrangler": "^4.143.0"
   }
 }

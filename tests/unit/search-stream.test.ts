@@ -64,3 +64,35 @@ it("retains JSON compatibility", async () => {
   );
   expect(fn).toHaveBeenCalledTimes(3);
 });
+
+it("automatically retries only unfinished items after a broken stream", async () => {
+  const { searchWithRecovery } = await import("@/lib/searchStream");
+  const request = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ type: "item", item: { query: "cereal", options: [] } }) + "\n", { headers: { "content-type": "application/x-ndjson" } }))
+    .mockResolvedValueOnce(Response.json({ items: [{ query: "peanuts", options: [] }], entitlement: meta.entitlement, disclaimer: "Test" }));
+  const seen: SearchEvent[] = [];
+  await searchWithRecovery({ queries: ["cereal", "peanuts"], signal: new AbortController().signal, request, onEvent: event => seen.push(event) });
+  expect(request.mock.calls.map(call => call[0])).toEqual([["cereal", "peanuts"], ["peanuts"]]);
+  expect(seen.filter(event => event.type === "item")).toHaveLength(2);
+});
+it.each([400, 401, 429])("does not retry status %s", async status => {
+  const { searchWithRecovery } = await import("@/lib/searchStream");
+  const request = vi.fn(async () => Response.json({ error: "Unavailable" }, { status }));
+  await expect(searchWithRecovery({ queries: ["cereal"], signal: new AbortController().signal, request, onEvent: () => {} })).rejects.toThrow();
+  expect(request).toHaveBeenCalledTimes(1);
+});
+it("does not retry a genuine empty result or an aborted search", async () => {
+  const { searchWithRecovery } = await import("@/lib/searchStream");
+  const request = vi.fn(async () => Response.json({ items: [{ query: "cereal", options: [], emptyReason: "nutrition_missing" }], entitlement: meta.entitlement, disclaimer: "Test" }));
+  await searchWithRecovery({ queries: ["cereal"], signal: new AbortController().signal, request, onEvent: () => {} });
+  expect(request).toHaveBeenCalledTimes(1);
+  const controller = new AbortController(); controller.abort();
+  await expect(searchWithRecovery({ queries: ["cereal"], signal: controller.signal, request, onEvent: () => {} })).rejects.toThrow();
+  expect(request).toHaveBeenCalledTimes(1);
+});
+
+it("keeps a complete set of items even when the final stream marker is lost", async () => {
+  const { searchWithRecovery } = await import("@/lib/searchStream");
+  const request = vi.fn(async () => new Response(JSON.stringify({ type: "item", item: { query: "cereal", options: [], emptyReason: "nutrition_missing" } }) + "\n", { headers: { "content-type": "application/x-ndjson" } }));
+  await searchWithRecovery({ queries: ["cereal"], signal: new AbortController().signal, request, onEvent: () => {} });
+  expect(request).toHaveBeenCalledTimes(1);
+});

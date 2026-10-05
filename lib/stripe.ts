@@ -6,7 +6,10 @@ export function getStripe() {
   if (stripe !== undefined) return stripe;
 
   const key = process.env.STRIPE_SECRET_KEY;
-  stripe = key ? new Stripe(key, { apiVersion: "2025-10-29.clover" }) : null;
+  stripe = key ? new Stripe(key, {
+    apiVersion: "2025-10-29.clover",
+    httpClient: Stripe.createFetchHttpClient(),
+  }) : null;
   return stripe;
 }
 

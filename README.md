@@ -1,5 +1,7 @@
 # Meezany
 
+**Live app:** [meezany.osamahmandawi.workers.dev](https://meezany.osamahmandawi.workers.dev/)
+
 **Better groceries, without the homework.**
 
 **Mission:** Help people make healthy choices at the grocery store.
@@ -33,7 +35,7 @@ This README preserves the full product vision alongside current implementation s
 
 For every grocery item: product photos, health/nutrition information, useful facts such as spicy, organic, sweeteners, or bulk, estimated prices, servings, and size. Absence of an organic tag is not evidence that a product is non-organic.
 
-Support cheapest-first and healthiest-first sorting. The long-term health score should be relative to the product category: cheese should be meaningfully compared with other cheeses. Keep the overall match score separate, because price and relevance are not nutrition.
+Support cheapest-first and Nutri-Score-first sorting. Use the Open Food Facts A–E grade instead of inventing a combined health or match score; keep query fit, selected preferences, nutrition grade, and price visible as separate signals.
 
 Click a card for expanded tags, full nutrition with favorable/less favorable signals, ingredients, and price per serving when supported by real serving information. Never invent missing values or assume a package count is a serving count.
 
@@ -56,7 +58,8 @@ Later, people can share recipe photos with ingredient lists that others can add 
 - Open Food Facts product discovery restricted to US-market catalog records with nutrition facts.
 - Exact-barcode Open Prices observations, deterministic health/diet ranking, tags, allergen checks, and beta FODMAP signals.
 - All 29 requested OFF attribute preferences with four importance levels, mandatory evidence filters, ingredient exclusions, and migration of existing selections. Shopping search is no longer used.
-- Supabase saved-list and bought-product APIs; Stripe checkout/webhook scaffolding.
+- Browser drafts preserve grocery order, checkoffs, list names and unsubmitted input across reloads and sign-in redirects. Drafts are separated by account; signed-out drafts transfer on sign-in. This is local recovery, not cloud saving.
+- Supabase saved-list and bought-product APIs. Stripe checkout/webhook code is scaffolding only; Stripe is not set up yet.
 - Shared Upstash Redis caching and rolling request/provider budgets; Redis is required for production search.
 
 The Meezany refresh adds compact grocery rows, a navigation rail, a desktop product-detail panel/mobile sheet, grouped preferences, and consistent brand assets. References live in `docs/design-reference/` and `public/brand/`.
@@ -76,13 +79,15 @@ Exact location/store pricing remains later work, not a requirement for useful di
 
 ## Stack And Data Flow
 
-Next.js App Router, React, TypeScript, Tailwind CSS, Node.js route handlers, Supabase Auth/Postgres, Stripe, Upstash Redis, Open Food Facts, and Open Prices. The app is hosted on Netlify. No native app or separate backend service is required.
+Next.js App Router, React, TypeScript, Tailwind CSS, Cloudflare Workers via OpenNext, Supabase Auth/Postgres, Upstash Redis, Open Food Facts, and Open Prices. The app is live on Cloudflare Workers at [meezany.osamahmandawi.workers.dev](https://meezany.osamahmandawi.workers.dev/). Stripe-related routes are present but not configured. No native app or separate backend service is required.
 
 `POST /api/search-products` authenticates the bearer token, resolves entitlements, normalizes queries, checks usage, and searches at most four items concurrently, streaming completed items to the UI. Open Food Facts records are validated, deduplicated, and filtered by nutrition evidence, relevance, and preferences. Eligible products receive bounded Open Prices lookups before final ranking. Failed items return their own error; products without nutrition facts are hidden.
 
 Open Food Facts country tags restrict discovery to products marked as sold in the US; they do not confirm local inventory or country of manufacture. Optional ZIP filters Open Prices observations. A price is shown only for an exact barcode with a recent USD observation at a US location, preferably ZIP-matched when supplied, otherwise matched to the same state. Otherwise it stays unknown. Catalog and price coverage are incomplete; no Shopping fallback is used.
 
-`overallScore` blends relevance, price, nutrition, and preferences: label it Match score. See `lib/scoring.ts`, `lib/health.ts`, and `lib/dietModes.ts` for the actual algorithm. Design-example numbers are not scoring specifications.
+There is no combined 0–100 match score. Recommended uses a readable ordering: Open Food Facts category fit, product name/brand relevance, Nutri-Score grade and numeric score, selected preference matches and diet modes, bulk preference, then comparable unit price. Mandatory preferences remain filters. Missing Nutri-Scores remain explicitly unknown. See `lib/scoring.ts`.
+
+Product details default to per-serving facts when the catalog provides serving nutrients or an explicit serving quantity, with a standard-basis comparison toggle. Missing portions stay unknown. Nutri-Score remains the OFF nutrition grade, with an explanation and OFF nutrient levels shown separately from processing and preferences. Catalog timeouts, 5xx failures and incomplete responses receive one automatic retry; valid empty results and rate limits are not retried. Every retry uses the shared provider budget.
 
 ## Local Setup
 
@@ -92,11 +97,23 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Use `.env.example` as the authoritative variable list. Configure the site URL, public Supabase URL/anon key, server-only Supabase service-role key, Upstash credentials, and Stripe keys/price IDs as needed. Never expose service-role or provider secrets in the browser.
+Use `.env.example` as the authoritative variable list. Configure the site URL, public Supabase URL/anon key, server-only Supabase service-role key, and Upstash credentials. Stripe keys and price IDs are optional placeholders for a future billing setup; the app currently has no Stripe account/configuration. Never expose service-role or provider secrets in the browser.
 
-For a fresh database, apply all files in `supabase/migrations/` in order. Existing databases need only unapplied migrations. Enable Google/email auth in Supabase, configure the Google provider, and allow the app origin as a redirect. For billing, connect a test Stripe webhook to `/api/stripe/webhook`.
+For a fresh database, apply all files in `supabase/migrations/` in order. Existing databases need only unapplied migrations. Enable Google/email auth in Supabase, configure the Google provider, and allow the app origin as a redirect. Stripe setup and webhook configuration are deferred.
 
 Open Food Facts and Open Prices require no paid Shopping API key. Production search requires Redis and fails closed if its budget service is unavailable. Development without Redis uses a bounded local budget; it does not provide cross-process enforcement. Provider cache read failures may fall back to a fresh lookup only if its budget reservation succeeds.
+
+## Cloudflare Deployment
+
+The production app runs on Cloudflare Workers using the OpenNext adapter. Deployment configuration lives in `wrangler.jsonc` and `open-next.config.ts`.
+
+```sh
+npm ci
+npm run build:cloudflare
+npm run deploy:cloudflare
+```
+
+For local Workers-runtime preview, run `npm run preview:cloudflare`. Configure Cloudflare build variables and Worker runtime secrets in the Cloudflare dashboard; do not commit credentials. See [Cloudflare migration and configuration](docs/CLOUDFLARE_MIGRATION.md) for the exact variable list, validation, and rollback steps. Netlify is no longer the production host.
 
 ## APIs And Persistence
 
@@ -129,4 +146,4 @@ npm run build
 
 Read installed Next.js guides in `node_modules/next/dist/docs/` before changing framework APIs, per `AGENTS.md`.
 
-The backend pass includes automated ownership, ranking, provider failure, and stream checks plus a live provider search. Before launch, recheck Google/email auth and Stripe webhooks with test accounts and monitor real provider coverage. Decide and restore the commercial access model. Add full-vision features incrementally after core discovery is reliable.
+The backend pass includes automated ownership, ranking, provider failure, and stream checks plus a live provider search. Recheck Google/email auth and monitor real provider coverage. Stripe webhook testing will be needed only after Stripe is configured. Decide and restore the commercial access model. Add full-vision features incrementally after core discovery is reliable.

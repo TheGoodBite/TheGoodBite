@@ -13,6 +13,7 @@ export const UNKNOWN_HEALTH: HealthInfo = {
 
 export function classifyHealth(input: {
   nutriScore?: string | null;
+  nutriScoreScore?: number | null;
   novaGroup?: number | null;
   confidence: HealthInfo["confidence"];
   nutrition?: HealthInfo["nutrition"];
@@ -39,6 +40,9 @@ export function classifyHealth(input: {
 
   return {
     nutriScore,
+    nutriScoreScore: Number.isFinite(input.nutriScoreScore)
+      ? input.nutriScoreScore ?? undefined
+      : undefined,
     novaGroup,
     classification,
     confidence: input.confidence,
@@ -50,20 +54,6 @@ export function classifyHealth(input: {
     categoriesTags: input.categoriesTags ?? [],
     allergensTags: input.allergensTags ?? [],
   };
-}
-
-export function scoreHealth(health: HealthInfo) {
-  let score = 0;
-
-  if (health.nutriScore === "a") score += 40;
-  if (health.nutriScore === "b") score += 30;
-  if (health.nutriScore === "c") score += 10;
-  if (health.nutriScore === "d" || health.nutriScore === "e") score -= 20;
-
-  if (health.novaGroup !== null && health.novaGroup <= 3) score += 20;
-  if (health.novaGroup === 4) score -= 30;
-
-  return score;
 }
 
 export function hasNutritionInfo(health?: HealthInfo | null): boolean {
@@ -109,6 +99,7 @@ export function hasVerifiedNutritionFacts(health?: HealthInfo | null): boolean {
     n.saturatedFat100g,
     n.sodium100g,
     n.fiber100g,
+    ...Object.values(health.nutritionPerServing ?? {}),
   ].some(
     (value) =>
       typeof value === "number" && Number.isFinite(value) && value >= 0,

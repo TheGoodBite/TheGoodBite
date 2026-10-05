@@ -111,6 +111,7 @@ export type ProductCandidate = {
   providerProductId: string;
   title: string;
   brand?: string;
+  categoryTags?: string[];
   imageUrl?: string;
   estimatedPrice: number | null;
   packageSize?: string;
@@ -127,8 +128,21 @@ export type ProductCandidate = {
   raw?: unknown;
 };
 
+export type NutritionAmounts = {
+  protein?: number;
+  sugars?: number;
+  carbohydrates?: number;
+  sodium?: number;
+  salt?: number;
+  fiber?: number;
+  energyKcal?: number;
+  saturatedFat?: number;
+  fat?: number;
+};
+
 export type HealthInfo = {
   nutriScore: "a" | "b" | "c" | "d" | "e" | "unknown";
+  nutriScoreScore?: number;
   novaGroup: number | null;
   classification: "strict" | "fallback" | "unknown" | "unhealthy";
   confidence: "high" | "medium" | "low";
@@ -143,6 +157,9 @@ export type HealthInfo = {
     saturatedFat100g?: number;
     fat100g?: number;
   };
+  nutritionPerServing?: NutritionAmounts;
+  servingQuantity?: number;
+  nutrientLevels?: Partial<Record<"fat" | "saturated-fat" | "sugars" | "salt", "low" | "moderate" | "high">>;
   source?: {
     provider: "open_food_facts";
     barcode?: string;
@@ -170,19 +187,11 @@ export type DietFit = {
 };
 
 export type RankedProduct = ProductCandidate & {
-  overallScore: number;
-  scoreParts: {
-    relevance: number;
-    price: number;
-    health: number;
-    diet: number;
-    history: number;
-  };
   health: HealthInfo;
   dietFit: DietFit;
   explanation: string;
   allergyStatus?: "conflict" | "unknown" | "not_detected";
-  preferenceFit?: { score: number; matches: string[]; unknown: string[]; unmet?: string[] };
+  preferenceFit?: { matches: string[]; unknown: string[]; unmet?: string[] };
 };
 
 export type SearchProductsRequest = {

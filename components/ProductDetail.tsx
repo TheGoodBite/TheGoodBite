@@ -13,12 +13,12 @@ import {
 } from "lucide-react";
 import type { Allergen, RankedProduct } from "@/lib/types";
 import { ALLERGEN_DETAILS, checkAllergens } from "@/lib/allergens";
+import { nutritionFacts } from "@/lib/nutritionFacts";
 import { extractTags, TAG_EXPLANATIONS } from "@/lib/tags";
 import {
   ProductImage,
   ProductPrice,
   NutriScoreBadge,
-  ScoreBadge,
   priceLocationExplanation,
 } from "./ProductPresentation";
 
@@ -41,7 +41,9 @@ export function ProductDetail({
   const [expandedTag, setExpandedTag] = useState<string | null>(null);
   const id = useId();
   const health = product.health;
-  const n = health.nutrition;
+  const [nutritionBasis, setNutritionBasis] = useState<"serving" | "100g">("serving");
+  const displayedFacts = nutritionFacts(health, nutritionBasis);
+  const n = displayedFacts.values;
   const allergens = checkAllergens(health, product.title, allergies);
   const tags = extractTags(health, product.title);
   const concernIds = new Set(["nova4", "high_sugar", "high_sodium", "sweeteners"]);
@@ -50,28 +52,28 @@ export function ProductDetail({
   const attributes = tags.filter((tag) => !concernIds.has(tag.id) && !positives.includes(tag));
   const preferenceFit = product.preferenceFit;
   const facts = [
-    { label: "Calories", value: n.energyKcal100g, unit: "kcal", icon: Flame },
-    { label: "Protein", value: n.protein100g, unit: "g", icon: Dumbbell },
+    { label: "Calories", value: n.energyKcal, unit: "kcal", icon: Flame },
+    { label: "Protein", value: n.protein, unit: "g", icon: Dumbbell },
     {
       label: "Carbohydrates",
-      value: n.carbohydrates100g,
+      value: n.carbohydrates,
       unit: "g",
       icon: Wheat,
     },
-    { label: "Total sugars", value: n.sugars100g, unit: "g", icon: Droplet },
+    { label: "Total sugars", value: n.sugars, unit: "g", icon: Droplet },
     {
       label: "Saturated fat",
-      value: n.saturatedFat100g,
+      value: n.saturatedFat,
       unit: "g",
       icon: Droplet,
     },
     {
       label: "Sodium",
-      value: n.sodium100g == null ? undefined : n.sodium100g * 1000,
+      value: n.sodium == null ? undefined : n.sodium * 1000,
       unit: "mg",
       icon: Info,
     },
-    { label: "Fiber", value: n.fiber100g, unit: "g", icon: Wheat },
+    { label: "Fiber", value: n.fiber, unit: "g", icon: Wheat },
   ];
   const servings = health.servingsPerContainer;
   const primaryPrice = product.priceObservation;
@@ -87,13 +89,26 @@ export function ProductDetail({
         <p className="notice">Demo example · not a verified product or price</p>
       )}
       <div className="detail-score">
-        <ScoreBadge product={product} large />
-        <div>
-          <strong>Match score</strong>
-          <span>Nutrition, price & your preferences</span>
-        </div>
         <NutriScoreBadge product={product} />
+        <div>
+          <strong>Open Food Facts Nutri-Score</strong>
+          <span>Nutrition grade · A is most favorable; E is least favorable.</span>
+        </div>
       </div>
+      <details className="nutrition-explanation">
+        <summary>How is this nutrition grade calculated?</summary>
+        <p>Nutri-Score compares nutritional quality using a standard 100g or 100ml basis. It balances energy, sugars, saturated fat and salt against fiber, protein and qualifying plant ingredients. The formula varies by food group.</p>
+        <p>Your serving changes the amounts you eat, not the grade. Processing (NOVA), organic claims, price and search relevance do not change this grade.</p>
+        {health.nutriScore === "unknown" && <p>Open Food Facts has no usable Nutri-Score for this record. We do not invent one.</p>}
+        {Object.entries(health.nutrientLevels ?? {}).length > 0 && (
+          <ul>
+            {Object.entries(health.nutrientLevels ?? {}).map(([nutrient, level]) => (
+              <li key={nutrient}>{nutrient.replace("saturated-fat", "Saturated fat")}: {level} per 100g/100ml (Open Food Facts)</li>
+            ))}
+          </ul>
+        )}
+        <p className="fine-print">These nutrient levels explain individual facts; they are not a full point-by-point breakdown of the grade. Open Food Facts records can be incomplete. Check the package.</p>
+      </details>
       <h2>{product.title}</h2>
       <div className="price-line">
         <span>{product.packageSize || "Size unavailable"}</span>
@@ -271,9 +286,19 @@ export function ProductDetail({
             </div>
           ) : (
             <>
-              <p className="facts-heading">
+              <div className="facts-heading">
                 <strong>Key facts</strong>
-                <span>per 100g</span>
+                {displayedFacts.servingAvailable ? (
+                  <label>Show facts <select aria-label="Nutrition basis" value={nutritionBasis} onChange={(event) => setNutritionBasis(event.target.value as "serving" | "100g")}>
+                    <option value="serving">Per serving</option>
+                    <option value="100g">Per 100g / 100ml</option>
+                  </select></label>
+                ) : <span>per 100g / 100ml</span>}
+              </div>
+              <p className="fine-print">
+                {displayedFacts.basis === "serving"
+                  ? `Per serving${health.servingSize ? ` · ${health.servingSize}` : " (catalog portion)"}`
+                  : displayedFacts.servingAvailable ? "Standard comparison basis" : "Serving nutrition unavailable; showing the catalog’s standard comparison basis."}
               </p>
               {facts.map(({ label, value, unit, icon: Icon }) => (
                 <div className="nutrition-row" key={label}>
@@ -339,8 +364,7 @@ export function ProductDetail({
             </p>
             <p className="fine-print">
               Product nutrition comes from Open Food Facts. Prices are attached
-              only where a matching offer or observation is available. Match
-              scores are not category-relative health scores.
+              only where a matching offer or observation is available. Search relevance is separate from the nutrition grade.
             </p>
             {product.dietFit.warnings.map((warning) => (
               <p className="notice" key={warning}>

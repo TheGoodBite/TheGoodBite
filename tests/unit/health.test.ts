@@ -1,49 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { scoreHealth, classifyHealth, hasNutritionInfo, UNKNOWN_HEALTH } from "@/lib/health";
+import { classifyHealth, hasNutritionInfo, UNKNOWN_HEALTH } from "@/lib/health";
 import type { HealthInfo } from "@/lib/types";
 
 function makeHealth(overrides: Partial<HealthInfo>): HealthInfo {
   return { ...UNKNOWN_HEALTH, ...overrides };
 }
-
-describe("scoreHealth", () => {
-  it("gives +40 for nutri-score A", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "a" }))).toBe(40);
-  });
-
-  it("gives +30 for nutri-score B", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "b" }))).toBe(30);
-  });
-
-  it("gives +10 for nutri-score C", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "c" }))).toBe(10);
-  });
-
-  it("gives -20 for nutri-score D", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "d" }))).toBe(-20);
-  });
-
-  it("gives -20 for nutri-score E", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "e" }))).toBe(-20);
-  });
-
-  it("gives 0 for unknown nutri-score", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "unknown" }))).toBe(0);
-  });
-
-  it("adds +20 for NOVA 1-3", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "a", novaGroup: 1 }))).toBe(60);
-    expect(scoreHealth(makeHealth({ nutriScore: "a", novaGroup: 3 }))).toBe(60);
-  });
-
-  it("subtracts -30 for NOVA 4", () => {
-    expect(scoreHealth(makeHealth({ nutriScore: "a", novaGroup: 4 }))).toBe(10);
-  });
-
-  it("returns 0 for fully unknown health", () => {
-    expect(scoreHealth(UNKNOWN_HEALTH)).toBe(0);
-  });
-});
 
 describe("classifyHealth", () => {
   it("classifies as strict for A + NOVA <= 3", () => {
@@ -93,6 +54,11 @@ describe("classifyHealth", () => {
     expect(h.nutrition.protein100g).toBe(12);
     expect(h.nutrition.sugars100g).toBe(4);
     expect(h.nutrition.sodium100g).toBe(0.2);
+  });
+
+  it("preserves Open Food Facts numeric Nutri-Score", () => {
+    const h = classifyHealth({ nutriScore: "a", nutriScoreScore: -7, confidence: "high" });
+    expect(h.nutriScoreScore).toBe(-7);
   });
 });
 

@@ -14,9 +14,10 @@ export async function discoverNutritionProducts(
   query: string,
   signal: AbortSignal,
   preferences: CatalogPreferences = {},
+  page = 1,
 ) {
   signal.throwIfAborted();
-  const products = await searchCatalog(query, preferences);
+  const products = await searchCatalog(query, preferences, page);
   signal.throwIfAborted();
   const healthById = new Map<string, HealthInfo>();
   const candidates: ProductCandidate[] = [];
@@ -45,6 +46,7 @@ export async function discoverNutritionProducts(
         .filter(Boolean)
         .join(" "),
       brand,
+      categoryTags: product.categories_tags ?? [],
       upc: barcode,
       market: "US-catalog",
       estimatedPrice: null,

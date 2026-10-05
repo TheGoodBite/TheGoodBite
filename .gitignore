@@ -5,5 +5,9 @@ coverage/
 .env
 .env*.local
 *.tsbuildinfo
+.open-next/
+.wrangler/
+.dev.vars
+.dev.vars.*
 supabase/.branches/
 supabase/.temp/

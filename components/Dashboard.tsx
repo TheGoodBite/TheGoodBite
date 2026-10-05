@@ -1,5 +1,6 @@
 "use client";
 
+import { useGroceryDraft } from "@/lib/hooks/useGroceryDraft";
 import { PreferenceControls } from "./PreferenceControls";
 import { restoreProductPreferences, EXTRA_DIET_MODES } from "@/lib/preferenceStorage";
 import type { ProductPreferences } from "@/lib/types";
@@ -34,12 +35,13 @@ import {
   type SearchProductsResponse,
 } from "@/lib/types";
 import { ALLERGEN_DETAILS } from "@/lib/allergens";
-import { consumeSearch } from "@/lib/searchStream";
+import { searchWithRecovery } from "@/lib/searchStream";
 import { compareProductPrices, hasProductPrice } from "@/lib/productSort";
 import { normalizeQuery } from "@/lib/utils";
 import { MeezanyLogo } from "./MeezanyLogo";
 import { Sheet } from "./Sheet";
-import { ProductImage, ProductPrice, NutriScoreBadge, ScoreBadge, priceLabel } from "./ProductPresentation";
+import { ProductImage, ProductPrice, NutriScoreBadge, priceLabel } from "./ProductPresentation";
+import { compareNutriScore, comparePrice } from "@/lib/scoring";
 import { ProductDetail } from "./ProductDetail";
 
 const DIET_LABELS: Record<DietMode, string> = {
@@ -76,6 +78,7 @@ const productKey = (product: RankedProduct) =>
 export default function Dashboard() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(!supabase);
   const [items, setItems] = useState<string[]>([]);
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const itemIds = useRef<Record<string, string>>({});
@@ -126,14 +129,34 @@ export default function Dashboard() {
   const searching = pendingQueries.length > 0;
   const visibleQueries = quickMode ? results.map((row) => row.query) : items;
 
+  const persistDraft = useGroceryDraft({
+    ownerId: session?.user.id ?? null,
+    authReady,
+    draft: { name, items, input, checked, activeListId, itemIds: itemIds.current },
+    onRestore: (draft) => {
+      requestRef.current?.abort();
+      setPendingQueries([]);
+      setResults([]);
+      setSelection(null);
+      setName(draft.name);
+      setItems(draft.items);
+      setInput(draft.input);
+      setChecked(draft.checked);
+      setActiveListId(draft.activeListId);
+      itemIds.current = draft.itemIds;
+    },
+  });
+
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data, error }) => {
       if (error) setMessage(error.message);
       else setSession(data.session);
+      setAuthReady(true);
     });
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
       setSession(next);
+      setAuthReady(true);
       if (!next) {
         setLists([]);
         setBought([]);
@@ -216,7 +239,7 @@ export default function Dashboard() {
     }
     setItems((current) => [...current, ...additions]);
     setInput("");
-    if (additions.length)
+    if (additions.length && accessToken)
       void searchProducts(
         stale ? [...items, ...additions] : [...pendingQueries, ...additions],
         !stale,
@@ -248,7 +271,7 @@ export default function Dashboard() {
     );
     if (selection && normalizeQuery(selection.query) === key)
       setSelection(null);
-    void searchProducts(
+    if (accessToken) void searchProducts(
       stale
         ? items.map((item) => (item === query ? next : item))
         : [...pendingQueries.filter((item) => item !== key), next],
@@ -330,56 +353,64 @@ export default function Dashboard() {
     setSearchedPreferences(preferenceKey);
     setMessage("");
     if (!incremental) setSelection(null);
+    const completedQueries = new Set<string>();
     try {
-      const response = await fetch("/api/search-products", {
-        method: "POST",
+      await searchWithRecovery({
+        queries,
         signal: controller.signal,
-        headers: {
-          accept: "application/x-ndjson",
-          "content-type": "application/json",
-          authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          items: queries,
-          productPreferences,
-          unwantedIngredients,
-          dietModes,
-          allergies,
-          bulkPreference,
-          zipCode: zipCode || undefined,
-          limitPerItem: 10,
+        onRetry: () => setMessage("Connection interrupted. Retrying unfinished items…"),
+        request: (retryQueries) => fetch("/api/search-products", {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            accept: "application/x-ndjson",
+            "content-type": "application/json",
+            authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            items: retryQueries,
+            productPreferences,
+            unwantedIngredients,
+            dietModes,
+            allergies,
+            bulkPreference,
+            zipCode: zipCode || undefined,
+            limitPerItem: 10,
         }),
-      });
-      await consumeSearch(response, (event) => {
-        if (controller.signal.aborted || requestRef.current !== controller)
-          return;
-        if (event.type === "meta") setMessage(event.disclaimer);
-        if (event.type === "item") {
-          const key = normalizeQuery(event.item.query);
-          if (removedQueries.current.has(key)) return;
-          setResults((current) =>
-            current.map((row) =>
-              normalizeQuery(row.query) === key ? event.item : row,
-            ),
-          );
-          setPendingQueries((current) =>
-            current.filter((query) => query !== key),
-          );
-          if (event.item.options.length)
-            setSelection(
-              (current) =>
-                current ?? {
-                  query: event.item.query,
-                  product: event.item.options[0],
-                },
+        }),
+        onEvent: (event) => {
+          if (controller.signal.aborted || requestRef.current !== controller)
+            return;
+          if (event.type === "meta") setMessage(event.disclaimer);
+          if (event.type === "item") {
+            const key = normalizeQuery(event.item.query);
+            completedQueries.add(key);
+            if (removedQueries.current.has(key)) return;
+            setResults((current) =>
+              current.map((row) =>
+                normalizeQuery(row.query) === key ? event.item : row,
+              ),
             );
-        }
+            setPendingQueries((current) =>
+              current.filter((query) => query !== key),
+            );
+            if (event.item.options.length)
+              setSelection(
+                (current) =>
+                  current ?? {
+                    query: event.item.query,
+                    product: event.item.options[0],
+                  },
+              );
+          }
+        },
       });
     } catch (error) {
       if (!controller.signal.aborted) {
         setResults((current) =>
           current.map((row) =>
             queries.includes(normalizeQuery(row.query)) &&
+            !completedQueries.has(normalizeQuery(row.query)) &&
             !row.options.length &&
             !row.error
               ? {
@@ -452,18 +483,19 @@ export default function Dashboard() {
       setMessage("Purchase recorded.");
     });
   }
-  const options = [
+  const optionResults = [
     ...(results.find(
       (row) => normalizeQuery(row.query) === normalizeQuery(optionQuery),
     )?.options || []),
-  ].sort((a, b) =>
+  ];
+  const options =
     sort === "price"
-      ? compareProductPrices(a, b)
+      ? [...optionResults].sort(compareProductPrices)
       : sort === "nutrition"
-        ? (b.health.classification === "unknown" ? -1 : b.scoreParts.health) -
-          (a.health.classification === "unknown" ? -1 : a.scoreParts.health)
-        : b.overallScore - a.overallScore,
-  );
+        ? [...optionResults].sort(
+            (a, b) => compareNutriScore(a.health, b.health) || comparePrice(a, b),
+          )
+        : optionResults;
   const detail = selection && (
     <ProductDetail
       key={productKey(selection.product)}
@@ -782,8 +814,8 @@ export default function Dashboard() {
                           <span className="error-text">{result.error}</span>
                         ) : best ? (
                           <>
-                            Best match · <ProductPrice product={best} />{" "}
-                            <ScoreBadge product={best} />
+                            Top pick · <ProductPrice product={best} /> ·{" "}
+                            <NutriScoreBadge product={best} />
                           </>
                         ) : result ? (
                           result.emptyReason === "nutrition_unavailable" ? (
@@ -832,6 +864,11 @@ export default function Dashboard() {
                           ? "Comparing products"
                           : "Nutrition · price · preferences"}
                       </span>
+                    )}
+                    {!loading && result && !best && (
+                      <button className="secondary-button" onClick={() => void searchProducts([query], true)}>
+                        Try again
+                      </button>
                     )}
                     {best && (
                       <button
@@ -1073,6 +1110,7 @@ export default function Dashboard() {
                     disabled={busy}
                     onClick={() =>
                       perform(async () => {
+                        persistDraft();
                         const { error } = await supabase.auth.signInWithOAuth({
                           provider: "google",
                           options: { redirectTo: window.location.origin },
@@ -1088,6 +1126,7 @@ export default function Dashboard() {
                     onSubmit={(e) => {
                       e.preventDefault();
                       void perform(async () => {
+                        persistDraft();
                         const { error } = await supabase.auth.signInWithOtp({
                           email,
                           options: { emailRedirectTo: window.location.origin },
@@ -1261,9 +1300,9 @@ export default function Dashboard() {
             <label>
               Sort{" "}
               <select value={sort} onChange={(e) => setSort(e.target.value)}>
-                <option value="match">Best match</option>
+                <option value="match">Recommended</option>
                 <option value="price">Lowest price</option>
-                <option value="nutrition">Nutrition score</option>
+                <option value="nutrition">Nutri-Score</option>
               </select>
             </label>
           </div>
@@ -1274,6 +1313,10 @@ export default function Dashboard() {
                 : "Price comparison is unavailable for these products. Showing your recommended order."}
             </p>
           )}
+          <p className="sort-explanation">
+            Recommended orders by category and name relevance, then Nutri-Score,
+            selected preferences and diet modes, bulk preference, then comparable unit price.
+          </p>
           {stale && (
             <p className="notice">
               Search again to apply your updated preferences.
@@ -1290,10 +1333,6 @@ export default function Dashboard() {
                   <ProductImage product={product} />
                 </div>
                 <NutriScoreBadge product={product} />
-                <div>
-                  <ScoreBadge product={product} />
-                  <small> Match score</small>
-                </div>
                 <h3>{product.title}</h3>
                 <p>{product.packageSize || "Size unavailable"}</p>
                 <strong><ProductPrice product={product} /></strong>

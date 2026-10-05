@@ -22,7 +22,8 @@ export function ProductImage({ product }: { product: RankedProduct }) {
 }
 
 export function NutriScoreBadge({ product }: { product: RankedProduct }) {
-  const grade = product.health.nutriScore;
+  const rawGrade = product.health.nutriScore;
+  const grade = ["a", "b", "c", "d", "e"].includes(rawGrade) ? rawGrade : "unknown";
   const label = grade === "unknown" ? "Nutri-Score unavailable" : `Nutri-Score ${grade.toUpperCase()}`;
   return (
     <span className={`nutri-score nutri-score-${grade}`} title={label} aria-label={label}>
@@ -32,37 +33,10 @@ export function NutriScoreBadge({ product }: { product: RankedProduct }) {
   );
 }
 
-export function ScoreBadge({
-  product,
-  large = false,
-}: {
-  product: RankedProduct;
-  large?: boolean;
-}) {
-  const unknown = product.health.classification === "unknown";
-  const tone = unknown
-    ? "neutral"
-    : product.overallScore >= 80
-      ? "good"
-      : product.overallScore >= 55
-        ? "mixed"
-        : "low";
-  return (
-    <span
-      className={`score score-${tone} ${large ? "score-large" : ""}`}
-      title="Match score: nutrition, relevance, price, and preferences"
-      aria-label={`Match score ${product.overallScore} out of 100`}
-    >
-      {Math.round(product.overallScore)}
-      {large && <small>/100</small>}
-    </span>
-  );
-}
-
 export function priceLabel(product: RankedProduct) {
-  return product.estimatedPrice === null
+  return !Number.isFinite(product.estimatedPrice)
     ? "Price unknown"
-    : `$${product.estimatedPrice.toFixed(2)}`;
+    : `$${product.estimatedPrice!.toFixed(2)}`;
 }
 
 export function priceLocationExplanation(product: RankedProduct) {

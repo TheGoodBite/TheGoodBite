@@ -25,9 +25,12 @@ export type OffProduct = {
   quantity?: string;
   countries_tags?: string[];
   nutriscore_grade?: string;
+  nutriscore_score?: number;
   nova_group?: number;
   nutriments?: Record<string, number | string>;
   serving_size?: string;
+  serving_quantity?: number;
+  nutrient_levels?: HealthInfo["nutrientLevels"];
   image_front_url?: string;
   image_url?: string;
   ingredients_text?: string;
@@ -39,7 +42,7 @@ export type OffProduct = {
   attribute_groups_en?: { attributes?: { id?: string; status?: string; match?: number; title?: string }[] }[];
 };
 const FIELDS =
-  "code,product_name,brands,quantity,countries_tags,nutriscore_grade,nova_group,nutriments,serving_size,ingredients_text,labels_tags,categories_tags,allergens_tags,traces_tags,image_front_url,image_url,ingredients_tags,attribute_groups_en";
+  "code,product_name,brands,quantity,countries_tags,nutriscore_grade,nutriscore_score,nova_group,nutriments,serving_size,serving_quantity,nutrient_levels,ingredients_text,labels_tags,categories_tags,allergens_tags,traces_tags,image_front_url,image_url,ingredients_tags,attribute_groups_en";
 const unknown = (availability: "no_match" | "unavailable"): HealthInfo => ({
   ...UNKNOWN_HEALTH,
   availability,
@@ -100,8 +103,8 @@ export function fromOffProduct(
   match: "barcode" | "text" | "catalog",
 ): HealthInfo {
   const n = product.nutriments ?? {};
-  const nutrient = (key: string) => {
-    const raw = n[`${key}_100g`];
+  const nutrient = (key: string, basis = "100g") => {
+    const raw = n[`${key}_${basis}`];
     const value =
       typeof raw === "number"
         ? raw
@@ -114,6 +117,7 @@ export function fromOffProduct(
   };
   const health = classifyHealth({
     nutriScore: product.nutriscore_grade,
+    nutriScoreScore: product.nutriscore_score,
     novaGroup: product.nova_group,
     confidence: match === "text" ? "medium" : "high",
     nutrition: {
@@ -139,6 +143,19 @@ export function fromOffProduct(
   const barcode = validBarcode(product.code);
   return {
     ...health,
+    servingQuantity: typeof product.serving_quantity === "number" && Number.isFinite(product.serving_quantity) && product.serving_quantity > 0 ? product.serving_quantity : undefined,
+    nutritionPerServing: {
+      protein: nutrient("proteins", "serving"),
+      sugars: nutrient("sugars", "serving"),
+      carbohydrates: nutrient("carbohydrates", "serving"),
+      sodium: nutrient("sodium", "serving"),
+      salt: nutrient("salt", "serving"),
+      fiber: nutrient("fiber", "serving"),
+      energyKcal: nutrient("energy-kcal", "serving"),
+      saturatedFat: nutrient("saturated-fat", "serving"),
+      fat: nutrient("fat", "serving"),
+    },
+    nutrientLevels: Object.fromEntries(Object.entries(product.nutrient_levels ?? {}).filter(([key, value]) => ["fat", "saturated-fat", "sugars", "salt"].includes(key) && ["low", "moderate", "high"].includes(value))),
     attributes: Object.fromEntries((product.attribute_groups_en ?? []).flatMap(group =>
       (group.attributes ?? []).filter(attribute =>
         PRODUCT_PREFERENCE_IDS.includes(attribute.id as ProductPreferenceId) &&
@@ -164,7 +181,7 @@ export function fromOffProduct(
 }
 async function getByBarcode(code: string) {
   return getOrSet<OffProduct | null>(
-    `off:v4:barcode:${code}`,
+    `off:v5:barcode:${code}`,
     86400 * 7,
     async () => {
       await reserveBudget("off:barcode", 15, 60000);
@@ -189,14 +206,13 @@ async function getByBarcode(code: string) {
     },
   );
 }
-export async function searchCatalog(query: string, preferences: CatalogPreferences = {}) {
+export async function searchCatalog(query: string, preferences: CatalogPreferences = {}, page = 1) {
   const filters = offSearchParameters(preferences);
-  const queryHash = await sha256(JSON.stringify([normalizeQuery(query), filters.toString()]));
+  const queryHash = await sha256(JSON.stringify([normalizeQuery(query), filters.toString(), page]));
   return getOrSet<OffProduct[]>(
-    `off:v6:us-search:${queryHash}`,
+    `off:v8:us-search:${queryHash}`,
     86400,
     async () => {
-      await reserveBudget("off:search", 10, 60000);
       const url = new URL("https://world.openfoodfacts.org/cgi/search.pl");
       for (const [key, value] of Object.entries({
         search_terms: query,
@@ -206,6 +222,7 @@ export async function searchCatalog(query: string, preferences: CatalogPreferenc
         action: "process",
         json: "1",
         page_size: "50",
+        page: String(page),
         tagtype_0: "countries",
         tag_contains_0: "contains",
         tag_0: "united-states",
@@ -213,13 +230,24 @@ export async function searchCatalog(query: string, preferences: CatalogPreferenc
       }))
         url.searchParams.set(key, value);
       for (const [key, value] of filters) url.searchParams.set(key, value);
-      const data = await providerJson<{ products?: OffProduct[] }>(
-        url,
-        "Nutrition search",
-      );
-      return (data.products ?? []).filter((p) =>
-        p.countries_tags?.includes("en:united-states"),
-      );
+      for (let attempt = 0; ; attempt++) {
+        // Every HTTP attempt spends the shared budget. Budget exhaustion and
+        // upstream rate limits are never retried automatically.
+        await reserveBudget("off:search", 10, 60000);
+        try {
+          const data = await providerJson<{ products?: OffProduct[] }>(
+            url, "Nutrition search", undefined, 10000,
+          );
+          if (!Array.isArray(data.products))
+            throw new ProviderError("Nutrition search returned an incomplete response.");
+          return data.products.filter((p) =>
+            p.countries_tags?.includes("en:united-states"),
+          );
+        } catch (error) {
+          if (attempt || !(error instanceof ProviderError) || error.status !== 503) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+      }
     },
   );
 }
