@@ -8,8 +8,8 @@ export const viewport = {
 export const metadata: Metadata = {
   title: "Meezany | Better groceries, without the homework.",
   description:
-    "Convert your grocery list into ranked healthy products sorted by price. Filter by diets, allergens, FODMAP status, and nutrition quality.",
-  keywords: ["grocery", "healthy food", "nutrition score", "diet", "product ranking", "fodmap", "allergens"],
+    "Explore grocery products in Open Food Facts order, with nutrition and price details. Filter by diets, allergens, FODMAP status, and nutrition quality.",
+  keywords: ["grocery", "healthy food", "nutrition score", "diet", "product search", "fodmap", "allergens"],
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/brand/meezany-orange-icon.ico",
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Meezany | Better groceries, without the homework.",
-    description: "Ranked grocery product discovery with nutrition, budget, and diet-fit scores.",
+    description: "Grocery product discovery with nutrition facts, prices, and preference matches.",
     type: "website"
   }
 };

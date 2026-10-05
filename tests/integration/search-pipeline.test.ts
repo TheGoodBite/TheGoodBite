@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fixture from "../fixtures/search-providers.json";
 import type { SearchEvent, SearchProductsResponse } from "@/lib/types";
 
-// The real route, catalog, cache, budgets, pricing, ranking and stream decoder
+// The real route, catalog, cache, budgets, pricing, eligibility and stream decoder
 // run together. Only external HTTP and the Supabase network boundary are replaced.
 vi.mock("@/lib/supabase", () => ({
   getUserFromRequest: vi.fn(async (request: Request) =>
@@ -384,7 +384,49 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
     expect(calls.filter(url => url.hostname === "prices.openfoodfacts.org")).toHaveLength(1);
     expect(calls[0].searchParams.get("fields")).toContain("attribute_groups_en");
   });
-  it("soft importance changes recommendation order while retaining conflicting options", async () => {
+  it("keeps provider order through price enrichment, even when requests finish out of order", async () => {
+    const base = fixture.catalog.products[0];
+    const codes = [base.code, "4006381333931", "96385074"];
+    let releaseFirst!: () => void;
+    const firstPrice = new Promise<void>(resolve => { releaseFirst = resolve; });
+    let thirdStarted!: () => void;
+    const pricesRunning = new Promise<void>(resolve => { thirdStarted = resolve; });
+    override = async url => {
+      if (url.hostname === "world.openfoodfacts.org") {
+        return Response.json({ products: [
+          { ...base, code: codes[0], product_name: "Zeta Flakes", nutriscore_grade: "c" },
+          { ...base, code: codes[1], product_name: "Kashi GO Original", nutriscore_grade: "a" },
+          { ...base, code: codes[2], product_name: "Breakfast Cereal", nutriscore_grade: "e" },
+        ] });
+      }
+      const code = url.searchParams.get("product_code")!;
+      const index = codes.indexOf(code);
+      if (index === 0) await firstPrice;
+      if (index === 2) thirdStarted();
+      return Response.json({ items: [{ ...fixture.price, product_code: code, price: [8, 4, 1][index],
+        date: new Date().toISOString().slice(0, 10) }] });
+    };
+    const result = json({ items: ["cereal"] });
+    try {
+      await pricesRunning;
+    } finally {
+      releaseFirst();
+    }
+    const products = (await result).items[0].options;
+    expect(products.map(p => p.upc)).toEqual(codes);
+    expect(products.map(p => p.estimatedPrice)).toEqual([8, 4, 1]);
+    expect(products.map(p => p.health.nutriScore)).toEqual(["c", "a", "e"]);
+    expect(products[1].health.source?.match).toBe("catalog");
+  });
+  it("does not fetch another page based on nutrition grades", async () => {
+    override = url => url.hostname === "world.openfoodfacts.org"
+      ? Response.json({ products: [{ ...fixture.catalog.products[0], nutriscore_grade: "c" }] })
+      : providers(url);
+    const row = (await json({ items: ["cereal"] })).items[0];
+    expect(row.options[0].health.nutriScore).toBe("c");
+    expect(calls.filter(url => url.hostname === "world.openfoodfacts.org")).toHaveLength(1);
+  });
+  it("soft importance annotates options while preserving provider order", async () => {
     const base = fixture.catalog.products[0];
     override = url => url.hostname === "world.openfoodfacts.org"
       ? Response.json({ products: [
@@ -393,8 +435,9 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
         ] }) : providers(url);
     const row = (await json({ items: ["yogurt"], productPreferences: { labels_organic: "very_important" } })).items[0];
     expect(row.options).toHaveLength(2);
-    expect(row.options[0].upc).toBe("4006381333931");
-    expect(row.options[1].preferenceFit?.unmet).toContain("Organic farming");
+    expect(row.options.map(p => p.upc)).toEqual([base.code, "4006381333931"]);
+    expect(row.options[0].preferenceFit?.unmet).toContain("Organic farming");
+    expect(row.options[1].preferenceFit?.matches).toContain("Organic farming");
   });
   it("an older catalog cache cannot invent missing mandatory attribute evidence", async () => {
     const { setJson } = await import("@/lib/cache");

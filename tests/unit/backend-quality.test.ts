@@ -19,7 +19,7 @@ import { normalizeShoppingResult } from "@/lib/providers/googleShopping";
 import { checkAllergens } from "@/lib/allergens";
 import { evaluateFodmapFit } from "@/lib/fodmap";
 import { scoreDietFit } from "@/lib/dietModes";
-import { rankProducts } from "@/lib/scoring";
+import { prepareProducts } from "@/lib/productResults";
 import { stateForZip, postalZip } from "@/lib/zipState";
 import { buildShoppingQuery } from "@/lib/searchPreferences";
 import type { ProductCandidate } from "@/lib/types";
@@ -200,8 +200,7 @@ describe("nutrition identity and evidence", () => {
   it("excludes an allergy conflict rather than merely subtracting points", () => {
     const c = candidate("Peanut butter");
     expect(
-      rankProducts({
-        query: "peanut butter",
+      prepareProducts({
         candidates: [c],
         healthById: new Map([[c.providerProductId, UNKNOWN_HEALTH]]),
         allergies: ["peanuts"],
@@ -210,11 +209,10 @@ describe("nutrition identity and evidence", () => {
       }),
     ).toEqual([]);
   });
-  it("nutrition preferences still rank products without Nutri-Score", () => {
+  it("nutrition preferences annotate products without reordering them", () => {
     const a = candidate("Yogurt", { providerProductId: "a" }),
       b = candidate("Yogurt", { providerProductId: "b" });
-    const out = rankProducts({
-      query: "yogurt",
+    const out = prepareProducts({
       candidates: [a, b],
       healthById: new Map([
         ["a", { ...UNKNOWN_HEALTH, nutrition: { protein100g: 1 } }],
@@ -223,7 +221,8 @@ describe("nutrition identity and evidence", () => {
       dietModes: ["high_protein"],
       limit: 2,
     });
-    expect(out[0].providerProductId).toBe("b");
+    expect(out.map(p => p.providerProductId)).toEqual(["a", "b"]);
+    expect(out[1].dietFit.matchedModes).toContain("high_protein");
   });
   it("search expansion includes preferences with a bounded number of hints", () => {
     const q = buildShoppingQuery(

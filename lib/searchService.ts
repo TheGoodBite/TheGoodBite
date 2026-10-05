@@ -1,7 +1,7 @@
 import { discoverNutritionProducts } from "@/lib/catalogDiscovery";
 import { getOpenPricesForBarcode } from "@/lib/providers/openPrices";
 import { withUnitPrice } from "@/lib/products";
-import { rankProducts } from "@/lib/scoring";
+import { prepareProducts } from "@/lib/productResults";
 import { mapConcurrent, ProviderError } from "@/lib/providerRuntime";
 import type {
   SearchProductsRequest,
@@ -36,40 +36,6 @@ export async function searchItem(
     };
   }
   const warnings = new Set<string>();
-  const rank = (source: typeof catalog, limit: number) =>
-    rankProducts({
-      query,
-      candidates: source.candidates,
-      healthById: source.healthById,
-      productPreferences: preferences.productPreferences,
-      unwantedIngredients: preferences.unwantedIngredients,
-      dietModes: preferences.dietModes ?? [],
-      allergies: preferences.allergies ?? [],
-      bulkPreference: preferences.bulkPreference,
-      limit,
-    });
-  const preview = rank(catalog, 3);
-  // Broad text searches can bury highly rated, relevant products after the first
-  // OFF page. Fetch one additional page only when the first page has no A/B pick.
-  const hasStrongGrade = preview.some(
-    (product) => product.health.nutriScore === "a" || product.health.nutriScore === "b",
-  );
-  const hasLowerKnownGrade = preview.some((product) =>
-    ["c", "d", "e"].includes(product.health.nutriScore),
-  );
-  if (hasLowerKnownGrade && !hasStrongGrade) {
-    try {
-      const nextPage = await discoverNutritionProducts(query, signal, preferences, 2);
-      const seen = new Set(catalog.candidates.map((candidate) => candidate.providerProductId));
-      catalog = {
-        candidates: [...catalog.candidates, ...nextPage.candidates.filter((candidate) => !seen.has(candidate.providerProductId))],
-        healthById: new Map([...catalog.healthById, ...nextPage.healthById]),
-      };
-    } catch {
-      signal.throwIfAborted();
-      warnings.add("A second Open Food Facts results page could not be checked.");
-    }
-  }
   if (!catalog.candidates.length)
     return {
       query,
@@ -79,7 +45,14 @@ export async function searchItem(
         "Open Food Facts returned no US-market products with nutrition facts matching this search and its filters.",
       ],
     };
-  const eligible = rank(catalog, catalog.candidates.length);
+  const eligible = prepareProducts({
+    candidates: catalog.candidates,
+    healthById: catalog.healthById,
+    productPreferences: preferences.productPreferences,
+    dietModes: preferences.dietModes ?? [],
+    allergies: preferences.allergies ?? [],
+    limit: catalog.candidates.length,
+  });
   const excludedCount = catalog.candidates.length - eligible.length;
   if (excludedCount)
     warnings.add(
@@ -89,7 +62,8 @@ export async function searchItem(
     0,
     Math.min(preferences.limitPerItem ?? 10, 20),
   );
-  const withPrices = await mapConcurrent(selected, 3, async (product) => {
+  // mapConcurrent preserves input order even when price requests finish out of order.
+  const options = await mapConcurrent(selected, 3, async (product) => {
     signal.throwIfAborted();
     let candidate: typeof product = product;
     if (candidate.upc && !candidate.package?.bulk) {
@@ -113,12 +87,8 @@ export async function searchItem(
         );
       }
     }
-    return withUnitPrice(candidate);
+    return { ...candidate, ...withUnitPrice(candidate) };
   });
-  const options = rank(
-    { candidates: withPrices, healthById: catalog.healthById },
-    preferences.limitPerItem ?? 10,
-  );
   if (options.some((product) => product.estimatedPrice === null))
     warnings.add(
       "Some products have nutrition facts but no verified local price. Availability is not confirmed.",

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { compareProductPrices } from "@/lib/productSort";
+import { compareProductPrices, compareNutriScore } from "@/lib/productSort";
+import { UNKNOWN_HEALTH } from "@/lib/health";
 
 describe("lowest package price", () => {
   it("moves known prices ahead of missing and invalid prices, regardless of ranking", () => {
@@ -32,5 +33,19 @@ describe("lowest package price", () => {
       { estimatedPrice: 3, unitPrice: { amount: 3, unit: "100g" } },
     ];
     expect(products.sort(compareProductPrices)[0].estimatedPrice).toBe(3);
+  });
+});
+
+describe("explicit nutrition sort", () => {
+  it("sorts known grades before unknown and uses the provider's numeric score for ties", () => {
+    const products = [
+      UNKNOWN_HEALTH,
+      { ...UNKNOWN_HEALTH, nutriScore: "c" as const },
+      { ...UNKNOWN_HEALTH, nutriScore: "a" as const, nutriScoreScore: -1 },
+      { ...UNKNOWN_HEALTH, nutriScore: "a" as const, nutriScoreScore: -8 },
+    ];
+    expect([...products].sort(compareNutriScore)).toEqual([
+      products[3], products[2], products[1], products[0],
+    ]);
   });
 });

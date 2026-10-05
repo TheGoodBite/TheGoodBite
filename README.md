@@ -53,10 +53,10 @@ Later, people can share recipe photos with ingredient lists that others can add 
 
 ## Current App
 
-- Next.js web dashboard with list editing, quick lookup, optional ZIP, ranked options, and expanded product details.
+- Next.js web dashboard with list editing, quick lookup, optional ZIP, options in Open Food Facts order, and expanded product details.
 - Google OAuth and email magic links via Supabase.
 - Open Food Facts product discovery restricted to US-market catalog records with nutrition facts.
-- Exact-barcode Open Prices observations, deterministic health/diet ranking, tags, allergen checks, and beta FODMAP signals.
+- Exact-barcode Open Prices observations, nutrition and diet annotations, tags, allergen checks, and beta FODMAP signals.
 - All 29 requested OFF attribute preferences with four importance levels, mandatory evidence filters, ingredient exclusions, and migration of existing selections. Shopping search is no longer used.
 - Browser drafts preserve grocery order, checkoffs, list names and unsubmitted input across reloads and sign-in redirects. Drafts are separated by account; signed-out drafts transfer on sign-in. This is local recovery, not cloud saving.
 - Supabase saved-list and bought-product APIs. Stripe checkout/webhook code is scaffolding only; Stripe is not set up yet.
@@ -72,7 +72,7 @@ The Meezany refresh adds compact grocery rows, a navigation rail, a desktop prod
 
 Earlier pricing was $3.99/month or $19/year with limited free searches and paid saved lists, history, and Diet Mode Packs. Stripe integration exists, but current entitlement code is permissive. Restore the intended commercial model deliberately before billing users.
 
-1. **Zero-AI Diet Mode Packs:** Deterministic preferences influence ranking, with no model in product selection. Existing modes: high protein, low sugar, low carb, diabetes-conscious, low sodium, vegetarian, vegan, gluten-free, heart-conscious, weight-loss friendly, kid-friendly, and beta FODMAP. These are general food preferences, not medical advice.
+1. **Zero-AI Diet Mode Packs:** Preferences annotate matches and enforce mandatory exclusions while preserving Open Food Facts order. Existing modes: high protein, low sugar, low carb, diabetes-conscious, low sodium, vegetarian, vegan, gluten-free, heart-conscious, weight-loss friendly, kid-friendly, and beta FODMAP. These are general food preferences, not medical advice.
 2. **AI recipe ideas (later):** Use selected groceries, pantry items, and preferences to create recipes. Keep separate from search. A server-side OpenAI-compatible adapter can connect to an evaluated Qwen/GLM model through Ollama in development and usage-based hosting later. Select the actual model after checking hardware, license, structured-output quality, and hosting costs. Validate JSON, cap generation, check ingredients, and never invent nutrition or allergy safety. The current app needs no AI runtime.
 
 Exact location/store pricing remains later work, not a requirement for useful discovery or the initial paid proposition.
@@ -81,7 +81,7 @@ Exact location/store pricing remains later work, not a requirement for useful di
 
 Next.js App Router, React, TypeScript, Tailwind CSS, Cloudflare Workers via OpenNext, Supabase Auth/Postgres, Upstash Redis, Open Food Facts, and Open Prices. The app is live on Cloudflare Workers at [meezany.osamahmandawi.workers.dev](https://meezany.osamahmandawi.workers.dev/). Stripe-related routes are present but not configured. No native app or separate backend service is required.
 
-`POST /api/search-products` authenticates the bearer token, resolves entitlements, normalizes queries, checks usage, and searches at most four items concurrently, streaming completed items to the UI. Open Food Facts records are validated, deduplicated, and filtered by nutrition evidence, relevance, and preferences. Eligible products receive bounded Open Prices lookups before final ranking. Failed items return their own error; products without nutrition facts are hidden.
+`POST /api/search-products` authenticates the bearer token, resolves entitlements, normalizes queries, checks usage, and searches at most four items concurrently, streaming completed items to the UI. Open Food Facts records are validated, deduplicated, and filtered by nutrition evidence, relevance, and preferences. Eligible products receive bounded Open Prices lookups without changing their order. Failed items return their own error; products without nutrition facts are hidden.
 
 Open Food Facts country tags restrict discovery to products marked as sold in the US; they do not confirm local inventory or country of manufacture. Optional ZIP filters Open Prices observations. A price is shown only for an exact barcode with a recent USD observation at a US location, preferably ZIP-matched when supplied, otherwise matched to the same state. Otherwise it stays unknown. Catalog and price coverage are incomplete; no Shopping fallback is used.
 
@@ -146,4 +146,4 @@ npm run build
 
 Read installed Next.js guides in `node_modules/next/dist/docs/` before changing framework APIs, per `AGENTS.md`.
 
-The backend pass includes automated ownership, ranking, provider failure, and stream checks plus a live provider search. Recheck Google/email auth and monitor real provider coverage. Stripe webhook testing will be needed only after Stripe is configured. Decide and restore the commercial access model. Add full-vision features incrementally after core discovery is reliable.
+The backend pass includes automated ownership, provider ordering, provider failure, and stream checks plus a live provider search. Recheck Google/email auth and monitor real provider coverage. Stripe webhook testing will be needed only after Stripe is configured. Decide and restore the commercial access model. Add full-vision features incrementally after core discovery is reliable.

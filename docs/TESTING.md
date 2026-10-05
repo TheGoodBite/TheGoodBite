@@ -12,7 +12,7 @@ npm run build
 
 `npm test` runs both offline suites and skips the live test unless explicitly opted in. The GitHub Actions workflow runs unit tests, integration tests, type checking, and a production build for main pushes and pull requests. It requires no service credentials. It consumes runner minutes under the repository's existing GitHub plan, not provider credits.
 
-The integration suite runs the real search route through request validation, entitlements, rolling local budgets, provider adapters, catalog product identity, nutrition evidence, exclusion rules, cache, price enrichment, ranking, and the actual client stream decoder. It covers:
+The integration suite runs the real search route through request validation, entitlements, rolling local budgets, provider adapters, catalog product identity, nutrition evidence, exclusion rules, cache, price enrichment, provider-order preservation, and the actual client stream decoder. It covers:
 
 - Deduplicated queries and US-market catalog records with exact barcode identity.
 - Sourced nutrition with explicit units, carbohydrate values, and valid zero values.

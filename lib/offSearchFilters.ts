@@ -5,7 +5,7 @@ export type CatalogPreferences = Pick<SearchProductsRequest,
   "allergies" | "dietModes" | "productPreferences" | "unwantedIngredients">;
 
 // These are Open Food Facts taxonomy IDs, not ingredient/title heuristics.
-// Keep soft preferences out of the query: they affect ranking, not eligibility.
+// Keep soft preferences out of the query: they annotate product details without changing eligibility or order.
 export function offSearchParameters(preferences: CatalogPreferences = {}) {
   const { preferences: attributes } = restoreProductPreferences(preferences);
   const params = new URLSearchParams();

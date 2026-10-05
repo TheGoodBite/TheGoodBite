@@ -36,12 +36,11 @@ import {
 } from "@/lib/types";
 import { ALLERGEN_DETAILS } from "@/lib/allergens";
 import { searchWithRecovery } from "@/lib/searchStream";
-import { compareProductPrices, hasProductPrice } from "@/lib/productSort";
+import { compareProductPrices, hasProductPrice, compareNutriScore } from "@/lib/productSort";
 import { normalizeQuery } from "@/lib/utils";
 import { MeezanyLogo } from "./MeezanyLogo";
 import { Sheet } from "./Sheet";
 import { ProductImage, ProductPrice, NutriScoreBadge, priceLabel } from "./ProductPresentation";
-import { compareNutriScore, comparePrice } from "@/lib/scoring";
 import { ProductDetail } from "./ProductDetail";
 
 const DIET_LABELS: Record<DietMode, string> = {
@@ -89,16 +88,13 @@ export default function Dashboard() {
   const [results, setResults] = useState<ResultItem[]>([]);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [optionQuery, setOptionQuery] = useState("");
-  const [sort, setSort] = useState("match");
+  const [sort, setSort] = useState("provider");
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [productPreferences, setProductPreferences] = useState<ProductPreferences>({});
   const [unwantedIngredientsText, setUnwantedIngredientsText] = useState("");
   const unwantedIngredients = [...new Set(unwantedIngredientsText.split(/[,\n]/).map(value => value.trim().toLowerCase()).filter(Boolean))];
   const [dietModes, setDietModes] = useState<DietMode[]>([]);
   const [allergies, setAllergies] = useState<Allergen[]>([]);
-  const [bulkPreference, setBulkPreference] = useState<
-    "everyday" | "bulk" | "any"
-  >("everyday");
   const [zipCode, setZipCode] = useState("");
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [searchedPreferences, setSearchedPreferences] = useState("");
@@ -123,7 +119,6 @@ export default function Dashboard() {
     dietModes,
     allergies,
     zipCode,
-    bulkPreference,
   });
   const stale = results.length > 0 && searchedPreferences !== preferenceKey;
   const searching = pendingQueries.length > 0;
@@ -171,8 +166,6 @@ export default function Dashboard() {
       const saved = JSON.parse(
         localStorage.getItem("meezany_preferences") || "null",
       );
-      if (["everyday", "bulk", "any"].includes(saved?.bulkPreference))
-        setBulkPreference(saved.bulkPreference);
       const zip = saved?.zipCode ?? localStorage.getItem("goodbite_zip") ?? "";
       if (/^\d{0,5}$/.test(zip)) setZipCode(zip);
       const avoid =
@@ -373,7 +366,6 @@ export default function Dashboard() {
             unwantedIngredients,
             dietModes,
             allergies,
-            bulkPreference,
             zipCode: zipCode || undefined,
             limitPerItem: 10,
         }),
@@ -441,7 +433,7 @@ export default function Dashboard() {
   }
   function showOptions(query: string) {
     setOptionQuery(query);
-    setSort("match");
+    setSort("provider");
     setOverlay("options");
   }
   function openList(list: SavedList) {
@@ -493,7 +485,7 @@ export default function Dashboard() {
       ? [...optionResults].sort(compareProductPrices)
       : sort === "nutrition"
         ? [...optionResults].sort(
-            (a, b) => compareNutriScore(a.health, b.health) || comparePrice(a, b),
+            (a, b) => compareNutriScore(a.health, b.health),
           )
         : optionResults;
   const detail = selection && (
@@ -814,7 +806,7 @@ export default function Dashboard() {
                           <span className="error-text">{result.error}</span>
                         ) : best ? (
                           <>
-                            Top pick · <ProductPrice product={best} /> ·{" "}
+                            First result · <ProductPrice product={best} /> ·{" "}
                             <NutriScoreBadge product={best} />
                           </>
                         ) : result ? (
@@ -1034,25 +1026,6 @@ export default function Dashboard() {
             </label>
           ))}
           <p className="fine-print">FODMAP is beta and depends on portion and preparation.</p>
-          <h3>Price & shopping</h3>
-          <label className="field-label" htmlFor="bulk-preference">
-            Package preference
-          </label>
-          <select
-            id="bulk-preference"
-            className="text-input"
-            value={bulkPreference}
-            onChange={(e) =>
-              setBulkPreference(e.target.value as "everyday" | "bulk" | "any")
-            }
-          >
-            <option value="everyday">Prefer everyday sizes</option>
-            <option value="bulk">Prefer bulk & multipacks</option>
-            <option value="any">Show all sizes equally</option>
-          </select>
-          <p className="fine-print">
-            Prices are compared per unit when package sizes are known.
-          </p>
           <h3>Location</h3>
           <label className="field-label" htmlFor="zip">
             USA ZIP code (optional)
@@ -1300,7 +1273,7 @@ export default function Dashboard() {
             <label>
               Sort{" "}
               <select value={sort} onChange={(e) => setSort(e.target.value)}>
-                <option value="match">Recommended</option>
+                <option value="provider">Open Food Facts order</option>
                 <option value="price">Lowest price</option>
                 <option value="nutrition">Nutri-Score</option>
               </select>
@@ -1310,12 +1283,15 @@ export default function Dashboard() {
             <p className="fine-print">
               {options.some(hasProductPrice)
                 ? "Lowest package price first. Products without a price appear last."
-                : "Price comparison is unavailable for these products. Showing your recommended order."}
+                : "Price comparison is unavailable for these products. Showing Open Food Facts order."}
             </p>
           )}
           <p className="sort-explanation">
-            Recommended orders by category and name relevance, then Nutri-Score,
-            selected preferences and diet modes, bulk preference, then comparable unit price.
+            {sort === "nutrition"
+              ? "Nutri-Score A–E, with unrated products last."
+              : sort === "provider"
+                ? "Results follow Open Food Facts order after eligibility and mandatory preference checks."
+                : "Prices are estimates or dated observations. Local availability is not confirmed."}
           </p>
           {stale && (
             <p className="notice">
