@@ -236,7 +236,7 @@ export async function searchCatalog(query: string, preferences: CatalogPreferenc
         await reserveBudget("off:search", 10, 60000);
         try {
           const data = await providerJson<{ products?: OffProduct[] }>(
-            url, "Nutrition search", undefined, 10000,
+            url, "Nutrition search",
           );
           if (!Array.isArray(data.products))
             throw new ProviderError("Nutrition search returned an incomplete response.");

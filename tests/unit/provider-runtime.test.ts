@@ -7,6 +7,17 @@ afterEach(() => {
   vi.resetModules();
 });
 describe("provider timeouts", () => {
+  it("uses the 120-second timeout on the actual catalog search path", async () => {
+    await isolatedCache();
+    vi.stubEnv("NODE_ENV", "development");
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ products: [] })));
+    const { searchCatalog } = await import("@/lib/providers/openFoodFacts");
+    await searchCatalog("cereal");
+    expect(timeout).toHaveBeenCalledWith(120000);
+    expect(timeout).not.toHaveBeenCalledWith(10000);
+  });
+
   it("allows slow responses and aborts at 120 seconds", async () => {
     vi.useFakeTimers();
     vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
