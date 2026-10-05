@@ -1,12 +1,22 @@
 import { restoreProductPreferences } from "@/lib/preferenceStorage";
 import type { SearchProductsRequest } from "@/lib/types";
+import { normalizeQuery } from "@/lib/utils";
 
 export type CatalogPreferences = Pick<SearchProductsRequest,
   "allergies" | "dietModes" | "productPreferences" | "unwantedIngredients">;
 
 // These are Open Food Facts taxonomy IDs, not ingredient/title heuristics.
 // Keep soft preferences out of the query: they annotate product details without changing eligibility or order.
-export function offSearchParameters(preferences: CatalogPreferences = {}) {
+export function offCategoryForQuery(query: string) {
+  // Keyword "cereal" also matches OFF's broad cereals-and-their-products
+  // taxonomy, including bread and pizza. Plain grocery cereal means breakfast
+  // cereals; branded/qualified queries retain the provider's keyword behavior.
+  return /^(?:breakfast )?cereals?$/.test(normalizeQuery(query))
+    ? "en:breakfast-cereals"
+    : undefined;
+}
+
+export function offSearchParameters(preferences: CatalogPreferences = {}, query?: string) {
   const { preferences: attributes } = restoreProductPreferences(preferences);
   const params = new URLSearchParams();
   let index = 1; // country is criterion 0
@@ -15,6 +25,8 @@ export function offSearchParameters(preferences: CatalogPreferences = {}) {
     params.set(`tag_contains_${index}`, exclude ? "does_not_contain" : "contains");
     params.set(`tag_${index++}`, value);
   };
+  const category = query ? offCategoryForQuery(query) : undefined;
+  if (category) tag("categories", category);
   for (const [id, importance] of Object.entries(attributes).sort()) {
     if (importance !== "mandatory") continue;
     if (id.startsWith("allergens_no_")) {

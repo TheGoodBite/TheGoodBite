@@ -1,4 +1,4 @@
-import { offSearchParameters, type CatalogPreferences } from "@/lib/offSearchFilters";
+import { offCategoryForQuery, offSearchParameters, type CatalogPreferences } from "@/lib/offSearchFilters";
 import { getOrSet } from "@/lib/cache";
 import { classifyHealth, UNKNOWN_HEALTH } from "@/lib/health";
 import type { HealthInfo, ProductCandidate, ProductPreferenceId, ProductAttribute } from "@/lib/types";
@@ -207,15 +207,14 @@ async function getByBarcode(code: string) {
   );
 }
 export async function searchCatalog(query: string, preferences: CatalogPreferences = {}, page = 1) {
-  const filters = offSearchParameters(preferences);
+  const filters = offSearchParameters(preferences, query);
   const queryHash = await sha256(JSON.stringify([normalizeQuery(query), filters.toString(), page]));
   return getOrSet<OffProduct[]>(
-    `off:v8:us-search:${queryHash}`,
+    `off:v9:us-search:${queryHash}`,
     86400,
     async () => {
       const url = new URL("https://world.openfoodfacts.org/cgi/search.pl");
       for (const [key, value] of Object.entries({
-        search_terms: query,
         search_simple: "1",
         api_version: "3.4",
         lc: "en",
@@ -229,6 +228,7 @@ export async function searchCatalog(query: string, preferences: CatalogPreferenc
         fields: FIELDS,
       }))
         url.searchParams.set(key, value);
+      if (!offCategoryForQuery(query)) url.searchParams.set("search_terms", query);
       for (const [key, value] of filters) url.searchParams.set(key, value);
       for (let attempt = 0; ; attempt++) {
         // Every HTTP attempt spends the shared budget. Budget exhaustion and

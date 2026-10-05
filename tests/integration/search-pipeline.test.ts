@@ -91,6 +91,33 @@ async function json(body: unknown) {
   return response.json() as Promise<SearchProductsResponse>;
 }
 describe("Open Food Facts and Open Prices integration (no live calls)", () => {
+  it("requests breakfast cereals instead of broad cereal keywords and preserves API order", async () => {
+    const base = fixture.catalog.products[0];
+    override = url => {
+      if (url.hostname !== "world.openfoodfacts.org") return providers(url);
+      const categorySearch = url.searchParams.get("tagtype_1") === "categories" &&
+        url.searchParams.get("tag_1") === "en:breakfast-cereals" &&
+        !url.searchParams.has("search_terms");
+      return Response.json({ products: categorySearch ? [
+        { ...base, product_name: "Bran flakes", nutriscore_grade: "c", categories_tags: ["en:breakfast-cereals"] },
+        { ...base, code: "0018627116011", product_name: "organic cinnamon harvest", brands: "Kashi", nutriscore_grade: "a", categories_tags: ["en:breakfast-cereals"] },
+      ] : [
+        { ...base, code: "13356194", product_name: "SPICY CHICKEN & 'NDUJA PIZZA", brands: "Lidl", categories_tags: ["en:breads"] },
+      ] });
+    };
+    const row = (await json({ items: ["cereal"] })).items[0];
+    expect(row.options.map(p => p.title)).toEqual(["Acme Bran flakes", "Kashi organic cinnamon harvest"]);
+    expect(calls[0].searchParams.get("tag_0")).toBe("united-states");
+    expect(calls[0].searchParams.has("sort_by")).toBe(false);
+  });
+  it("keeps brand and qualified cereal searches as exact keyword requests", async () => {
+    for (const query of ["kashi", "kashi cereal", "cereal bars"]) {
+      await json({ items: [query] });
+    }
+    const searches = calls.filter(url => url.hostname === "world.openfoodfacts.org");
+    expect(searches.map(url => url.searchParams.get("search_terms"))).toEqual(["kashi", "kashi cereal", "cereal bars"]);
+    expect(searches.every(url => !url.searchParams.has("tagtype_1"))).toBe(true);
+  });
   it("returns catalog nutrition, deduplicates queries and uses eligible local observations", async () => {
     const row = (
       await json({ items: ["Yogurt", " yogurt "], zipCode: "01752" })

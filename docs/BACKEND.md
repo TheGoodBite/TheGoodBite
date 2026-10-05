@@ -10,6 +10,8 @@ One shared, cached US catalog search retrieves up to 50 records per grocery quer
 
 Products are deduplicated by validated GTIN or variant-preserving title and package identity. Different flavors, sizes, and multipacks stay separate. Package parsing supports weight, volume, and multipacks. Ambiguous measurements do not receive inferred unit prices. Package count is never treated as servings. The legacy bulk-preference request field remains accepted but does not reorder results.
 
+Plain `cereal`, `cereals`, `breakfast cereal`, and `breakfast cereals` queries use OFF's native `en:breakfast-cereals` category criterion instead of full-text keywords. OFF's keyword index can also match bread and pizza through broad cereal categories. Brand and qualified queries keep their original keywords. Category searches preserve OFF order and the US-market and mandatory-preference criteria; no local nutrition ranking is added. See [API investigation](API_SEARCH_INVESTIGATION.md) for live evidence and source-data limitations.
+
 ## Nutrition and preference evidence
 
 Nutrition is mapped directly from the selected Open Food Facts catalog record, including its Nutri-Score grade and numeric score when supplied. Explicit standard-basis and per-serving nutriments are mapped; an explicit serving quantity can scale standard-basis facts, but serving text is never parsed into a guessed weight; missing values stay missing. Details expose the source record and catalog match method. Products display the provider's A–E Nutri-Score; Meezany does not calculate or display a combined 0–100 match score.
@@ -78,6 +80,6 @@ Mandatory attributes require known evidence with at least 80% match. Allergen ab
 
 Unwanted ingredient matching is local and conservative: ingredient text or canonical tags can identify a named conflict; ingredient analysis tags are needed to establish absence. Missing terms or analysis produce unknown. Synonyms, translations, completeness, and composition changes are limitations shown in the UI. This is not OFF's parameterized canonical-ingredient API algorithm.
 
-Catalog cache schema uses `off:v8:us-search` with page included in the cache key; numeric Nutri-Score data is retained for within-grade ordering. A cache failure does not weaken mandatory rules. See [Bulk import plan](DATA_IMPORT_PLAN.md) for the deferred snapshot/worker proposal.
+Catalog cache schema uses `off:v9:us-search` with the native category criteria and page included in the cache key; numeric Nutri-Score data is retained for the user-selected Nutri-Score sort. A cache failure does not weaken mandatory rules. See [Bulk import plan](DATA_IMPORT_PLAN.md) for the deferred snapshot/worker proposal.
 
 Catalog requests use a 120-second timeout and one retry for transient failures or incomplete responses. Each HTTP attempt reserves the shared provider budget; 429s and budget failures are not retried. A valid empty catalog response is not an outage. The browser recovers interrupted streams once, requesting only unfinished items and preserving all completed rows, including genuine empty results.

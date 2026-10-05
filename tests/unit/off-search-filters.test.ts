@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { offSearchParameters } from "@/lib/offSearchFilters";
+import { offCategoryForQuery, offSearchParameters } from "@/lib/offSearchFilters";
 
 const criteria = (params: URLSearchParams) => {
   const result = [];
@@ -9,6 +9,26 @@ const criteria = (params: URLSearchParams) => {
 };
 
 describe("OFF search filters", () => {
+  it.each(["cereal", "cereals", " Breakfast   Cereals ", "breakfast cereal"])(
+    "maps the plain grocery query %s to the provider's breakfast-cereal category", query => {
+      expect(offCategoryForQuery(query)).toBe("en:breakfast-cereals");
+      expect(criteria(offSearchParameters({}, query))).toEqual([
+        ["categories", "contains", "en:breakfast-cereals"],
+      ]);
+    },
+  );
+  it.each(["kashi", "kashi cereal", "cereal bars", "chocolate cereal", "cereal grains"])(
+    "preserves keyword search for %s", query => {
+      expect(offCategoryForQuery(query)).toBeUndefined();
+    },
+  );
+  it("combines the category with mandatory filters without replacing either criterion", () => {
+    expect(criteria(offSearchParameters({ allergies: ["dairy"] }, "cereal"))).toEqual([
+      ["categories", "contains", "en:breakfast-cereals"],
+      ["allergens", "does_not_contain", "en:milk"],
+      ["traces", "does_not_contain", "en:milk"],
+    ]);
+  });
   it("migrates legacy milk and shellfish restrictions to allergen and trace exclusions", () => {
     expect(criteria(offSearchParameters({ allergies: ["dairy", "shellfish"] }))).toEqual([
       ["allergens", "does_not_contain", "en:crustaceans"],
