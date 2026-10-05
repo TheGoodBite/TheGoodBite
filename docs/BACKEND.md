@@ -6,7 +6,7 @@ Updated September 28, 2026. This describes shipped behavior; the full product vi
 
 The authenticated search route validates supported preferences, ZIP, and list size before provider requests. Product discovery uses only Open Food Facts; prices use only Open Prices. There are no active Shopping or SerpAPI calls, location-resolution requests, or retailer-title nutrition matching steps.
 
-One shared, cached US catalog search retrieves up to 50 records per grocery query. Each visible product requires a valid GTIN, product name, explicit `en:united-states` country tag, relevant title, and nutrition evidence from its own record. All requested title words must match after normalization, avoiding wrong-flavor suggestions. Catalog search is first-page discovery rather than exhaustive inventory; specific queries can miss products. US-market tags describe where a product is sold, not its origin or current local availability.
+One shared, cached US catalog search retrieves up to 50 records per grocery query. Each visible product requires a valid GTIN, product name, explicit `en:united-states` country tag, and nutrition evidence from its own record. Text matching is delegated to Open Food Facts, allowing alternate product names. A targeted milk-beverage screen excludes explicit derivative products (such as butter, creamers, chocolate bars, and ice cream) identified by product names or English category tags, unless the query explicitly requests those derivatives. Missing categories alone do not exclude products. Catalog search is first-page discovery rather than exhaustive inventory; specific queries can miss products. US-market tags describe where a product is sold, not its origin or current local availability.
 
 Products are deduplicated by validated GTIN or variant-preserving title and package identity. Different flavors, sizes, and multipacks stay separate. Package parsing supports weight, volume, and multipacks. Ambiguous measurements do not receive inferred unit prices. Bulk preference affects ranking; package count is never treated as servings.
 
@@ -24,12 +24,14 @@ Open Prices is queried only for selected eligible products with validated exact 
 
 An eligible observation includes its source, date, locality, and link. Products without an eligible observation remain visible with nutrition and an unknown price. No Shopping estimates are substituted. Sparse price coverage, even after the same-state fallback, is expected. These observations do not establish real-time inventory or shelf prices. Unit prices require supported denominators; price per serving requires an explicit serving count.
 
+The options panel's Lowest price sort compares positive, finite package prices, ascending. Missing or invalid prices appear last, retaining recommendation order among ties. The panel explains when no price comparison is possible; it never compares unlike unit-price measurements.
+
 ## Performance and cost control
 
 - Four grocery items run concurrently; each uses one shared catalog query followed by up to three concurrent price lookups for its selected recommendations (default 10, maximum 20).
 - Completed items stream as NDJSON (`meta`, `item`, `done`); JSON remains supported. Failures are isolated per item and interrupted streams are visible as retryable errors.
-- Request scheduling deadline is 45 seconds; route maximum duration is 60 seconds. Shared cache lookups have their own bounded timeouts and can briefly outlive a disconnected request.
-- Provider timeouts default to 6 seconds; Open Prices uses 3.5 seconds. Redis uses a 1.5-second timeout with retries disabled.
+- Request scheduling deadline and route maximum duration are 180 seconds, allowing a full catalog lookup plus price enrichment. Deployment platform limits must also permit that duration. Shared cache lookups have their own bounded timeouts and can outlive a disconnected request.
+- Provider timeouts default to 120 seconds, including catalog searches; optional Open Prices enrichment uses 3.5 seconds. Redis uses a 1.5-second timeout with retries disabled. Catalog errors preserve provider timeout, rate-limit, and budget messages rather than reporting every failure as an outage.
 - Identical in-process cache misses share one request. Catalog records are cached for a day and price lookups for an hour. Empty/no-match answers are cached for at most five minutes; errors are not cached. Catalog records cached before photo fields were added can lack photos until refreshed.
 - Rolling shared budgets: 10 search requests/minute/user; 100 items/day/user by default; OFF catalog 10/minute, OFF barcode 15/minute for legacy helpers, Open Prices 30/minute. The active pipeline does not require separate barcode enrichment.
 - `SEARCH_ITEMS_PER_DAY` configures the daily item limit. Shared Redis enforcement is mandatory in production and fails closed on outage. Development without Redis has local-only limits.

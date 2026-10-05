@@ -25,6 +25,31 @@ function req(body: unknown, stream = false) {
   });
 }
 describe("search route", () => {
+  it("allows a 120-second lookup plus enrichment within the route deadline", async () => {
+    vi.useFakeTimers();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), ms);
+      return controller.signal;
+    });
+    let started!: () => void;
+    const running = new Promise<void>(resolve => { started = resolve; });
+    searchItem.mockImplementation(async (query, _preferences, signal: AbortSignal) => {
+      started();
+      await new Promise(resolve => setTimeout(resolve, 125000));
+      signal.throwIfAborted();
+      return { query, options: [] };
+    });
+    try {
+      const response = POST(req({ items: ["milk"] }));
+      await running;
+      await vi.advanceTimersByTimeAsync(125000);
+      expect((await (await response).json()).items).toEqual([{ query: "milk", options: [] }]);
+    } finally {
+      timeout.mockRestore();
+      vi.useRealTimers();
+    }
+  });
   it("validates allergy enums and item counts before provider work", async () => {
     expect(
       (await POST(req({ items: ["milk"], allergies: ["invalid"] }))).status,

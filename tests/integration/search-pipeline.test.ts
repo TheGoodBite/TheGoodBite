@@ -117,7 +117,7 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
       calls.filter((url) => url.hostname === "prices.openfoodfacts.org"),
     ).toHaveLength(1);
   });
-  it("sends the complete text query to OFF without a second local title filter", async () => {
+  it("sends the complete text query to OFF", async () => {
     override = url => url.hostname === "world.openfoodfacts.org"
       ? Response.json({ products: [] }) : providers(url);
     const row = (await json({ items: ["vanilla yogurt"] })).items[0];
@@ -137,6 +137,25 @@ describe("Open Food Facts and Open Prices integration (no live calls)", () => {
     expect(row.options).toEqual([]);
     expect(row.emptyReason).toBe("nutrition_unavailable");
     expect(calls).toHaveLength(1);
+  });
+  it("preserves rate-limit messages instead of calling every failure an outage", async () => {
+    override = () => new Response("limited", { status: 429 });
+    const row = (await json({ items: ["milk"] })).items[0];
+    expect(row.emptyReason).toBe("nutrition_unavailable");
+    expect(row.warnings?.join(" ")).toContain("rate limited");
+    expect(calls).toHaveLength(1);
+  });
+  it("excludes oat-milk derivatives before spending price requests", async () => {
+    const base = fixture.catalog.products[0];
+    override = url => url.hostname === "world.openfoodfacts.org"
+      ? Response.json({ products: [
+          { ...base, product_name: "Silk Oat", categories_tags: ["en:oat-milks"] },
+          { ...base, code: "4006381333931", product_name: "Oat Milk Butter", categories_tags: ["en:plant-based-butters"] },
+          { ...base, code: "96385074", product_name: "Oat Milk Chocolate Bar" },
+        ] }) : providers(url);
+    const row = (await json({ items: ["oat milk"] })).items[0];
+    expect(row.options.map(p => p.title)).toEqual(["Acme Silk Oat"]);
+    expect(calls.filter(url => url.hostname === "prices.openfoodfacts.org")).toHaveLength(1);
   });
   it("excludes dairy conflicts before any price requests", async () => {
     const row = (await json({ items: ["yogurt"], allergies: ["dairy"] }))

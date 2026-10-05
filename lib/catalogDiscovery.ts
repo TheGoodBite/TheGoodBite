@@ -1,5 +1,6 @@
 import { searchCatalog, fromOffProduct } from "@/lib/providers/openFoodFacts";
 import { hasVerifiedNutritionFacts } from "@/lib/health";
+import { matchesCatalogProductType } from "@/lib/catalogRelevance";
 import {
   deduplicateProducts,
   parsePackage,
@@ -24,7 +25,8 @@ export async function discoverNutritionProducts(
     if (
       !barcode ||
       !product.product_name?.trim() ||
-      !product.countries_tags?.includes("en:united-states")
+      !product.countries_tags?.includes("en:united-states") ||
+      !matchesCatalogProductType(query, product)
     )
       continue;
     const health = fromOffProduct(product, "catalog");

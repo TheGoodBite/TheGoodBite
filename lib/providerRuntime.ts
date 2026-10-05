@@ -74,7 +74,7 @@ export async function providerJson<T>(
   url: URL | string,
   provider: string,
   signal?: AbortSignal,
-  timeoutMs = 6000,
+  timeoutMs = 120000,
 ): Promise<T> {
   signal?.throwIfAborted();
   try {

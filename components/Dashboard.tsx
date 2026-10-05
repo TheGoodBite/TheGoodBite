@@ -35,6 +35,7 @@ import {
 } from "@/lib/types";
 import { ALLERGEN_DETAILS } from "@/lib/allergens";
 import { consumeSearch } from "@/lib/searchStream";
+import { compareProductPrices, hasProductPrice } from "@/lib/productSort";
 import { normalizeQuery } from "@/lib/utils";
 import { MeezanyLogo } from "./MeezanyLogo";
 import { Sheet } from "./Sheet";
@@ -457,7 +458,7 @@ export default function Dashboard() {
     )?.options || []),
   ].sort((a, b) =>
     sort === "price"
-      ? (a.estimatedPrice ?? Infinity) - (b.estimatedPrice ?? Infinity)
+      ? compareProductPrices(a, b)
       : sort === "nutrition"
         ? (b.health.classification === "unknown" ? -1 : b.scoreParts.health) -
           (a.health.classification === "unknown" ? -1 : a.scoreParts.health)
@@ -1266,6 +1267,13 @@ export default function Dashboard() {
               </select>
             </label>
           </div>
+          {sort === "price" && (
+            <p className="fine-print">
+              {options.some(hasProductPrice)
+                ? "Lowest package price first. Products without a price appear last."
+                : "Price comparison is unavailable for these products. Showing your recommended order."}
+            </p>
+          )}
           {stale && (
             <p className="notice">
               Search again to apply your updated preferences.

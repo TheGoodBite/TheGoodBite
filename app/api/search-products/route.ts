@@ -16,7 +16,7 @@ import {
 import { searchItem } from "@/lib/searchService";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 180;
 const searchSchema = z.object({
   productPreferences: z.partialRecord(z.enum(PRODUCT_PREFERENCE_IDS), z.enum(PREFERENCE_IMPORTANCE)).default({}),
   unwantedIngredients: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
@@ -50,7 +50,8 @@ export async function POST(request: Request) {
     const signal = AbortSignal.any([
       request.signal,
       abort.signal,
-      AbortSignal.timeout(45000),
+      // Allow a full 120-second catalog lookup, then price enrichment.
+      AbortSignal.timeout(180000),
     ]);
     const meta: SearchProductsResponse["entitlement"] = {
       isPaid: entitlement.isPaid,

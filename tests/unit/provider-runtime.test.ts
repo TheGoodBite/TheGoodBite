@@ -1,8 +1,47 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.resetModules();
+});
+describe("provider timeouts", () => {
+  it("allows slow responses and aborts at 120 seconds", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), ms);
+      return controller.signal;
+    });
+    let signal!: AbortSignal;
+    vi.stubGlobal("fetch", vi.fn((_url, init) => {
+      signal = init.signal;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    }));
+    const { providerJson } = await import("@/lib/providerRuntime");
+    const result = providerJson("https://example.test/catalog", "Nutrition search").catch(error => error);
+    await vi.advanceTimersByTimeAsync(119999);
+    expect(signal.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(signal.aborted).toBe(true);
+    expect(await result).toMatchObject({
+      message: expect.stringContaining("did not respond in time"),
+    });
+  });
+
+  it("still cancels immediately when the caller aborts", async () => {
+    vi.stubGlobal("fetch", vi.fn((_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true });
+    })));
+    const { providerJson } = await import("@/lib/providerRuntime");
+    const controller = new AbortController();
+    const result = providerJson("https://example.test/catalog", "Nutrition search", controller.signal);
+    controller.abort();
+    await expect(result).rejects.toMatchObject({ name: "AbortError" });
+  });
 });
 async function isolatedCache() {
   vi.stubEnv("UPSTASH_REDIS_REST_URL", "");

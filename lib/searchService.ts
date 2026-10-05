@@ -2,7 +2,7 @@ import { discoverNutritionProducts } from "@/lib/catalogDiscovery";
 import { getOpenPricesForBarcode } from "@/lib/providers/openPrices";
 import { withUnitPrice } from "@/lib/products";
 import { rankProducts } from "@/lib/scoring";
-import { mapConcurrent } from "@/lib/providerRuntime";
+import { mapConcurrent, ProviderError } from "@/lib/providerRuntime";
 import type {
   SearchProductsRequest,
   SearchProductsResponse,
@@ -18,14 +18,20 @@ export async function searchItem(
   let catalog: Awaited<ReturnType<typeof discoverNutritionProducts>>;
   try {
     catalog = await discoverNutritionProducts(query, signal, preferences);
-  } catch {
+  } catch (error) {
     signal.throwIfAborted();
+    console.warn("meezany.search.catalog_failed", {
+      durationMs: Date.now() - start,
+      status: error instanceof ProviderError ? error.status : 503,
+    });
     return {
       query,
       options: [],
       emptyReason: "nutrition_unavailable",
       warnings: [
-        "Nutrition catalog lookup is temporarily unavailable. Please try again shortly.",
+        error instanceof ProviderError
+          ? error.message
+          : "Nutrition catalog lookup is temporarily unavailable. Please try again shortly.",
       ],
     };
   }
