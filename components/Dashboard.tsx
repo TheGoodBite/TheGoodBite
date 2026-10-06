@@ -1,5 +1,8 @@
 "use client";
 
+import { ListReview } from "./ListReview";
+import { defaultItemDetails, pickProduct, snapshotSchema, type ItemDetails, type ShareSummary } from "@/lib/listSharing";
+import type { SavedList } from "@/lib/listRepository";
 import { useGroceryDraft } from "@/lib/hooks/useGroceryDraft";
 import { PreferenceControls } from "./PreferenceControls";
 import { restoreProductPreferences, EXTRA_DIET_MODES } from "@/lib/preferenceStorage";
@@ -58,19 +61,9 @@ const DIET_LABELS: Record<DietMode, string> = {
   fodmap: "FODMAP (beta)",
 };
 type ResultItem = SearchProductsResponse["items"][number];
-type SavedList = {
-  id: string;
-  name: string;
-  grocery_list_items?: {
-    id?: string;
-    query: string;
-    sort_order: number;
-    is_active: boolean;
-  }[];
-};
 type Selection = { query: string; product: RankedProduct };
 type Overlay =
-  "preferences" | "account" | "lists" | "save" | "options" | "detail" | null;
+  "preferences" | "account" | "lists" | "save" | "options" | "detail" | "share" | "shop" | "choose" | null;
 const productKey = (product: RankedProduct) =>
   `${product.provider}:${product.providerProductId}`;
 
@@ -79,6 +72,12 @@ export default function Dashboard() {
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(!supabase);
   const [items, setItems] = useState<string[]>([]);
+  const [itemDetails, setItemDetails] = useState<Record<string, ItemDetails>>({});
+  const [shoppingEnabled, setShoppingEnabled] = useState(false);
+  const [resultUrl, setResultUrl] = useState("");
+  const [shares, setShares] = useState<ShareSummary[]>([]);
+  const [packageCount, setPackageCount] = useState(1);
+  const openedDestination = useRef("");
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const itemIds = useRef<Record<string, string>>({});
   const [name, setName] = useState("Weekly groceries");
@@ -127,7 +126,7 @@ export default function Dashboard() {
   const persistDraft = useGroceryDraft({
     ownerId: session?.user.id ?? null,
     authReady,
-    draft: { name, items, input, checked, activeListId, itemIds: itemIds.current },
+    draft: { name, items, input, checked, activeListId, itemIds: itemIds.current, itemDetails },
     onRestore: (draft) => {
       requestRef.current?.abort();
       setPendingQueries([]);
@@ -135,6 +134,7 @@ export default function Dashboard() {
       setSelection(null);
       setName(draft.name);
       setItems(draft.items);
+      setItemDetails(Object.fromEntries(draft.items.map(query => [normalizeQuery(query), draft.itemDetails?.[normalizeQuery(query)] ?? defaultItemDetails()])));
       setInput(draft.input);
       setChecked(draft.checked);
       setActiveListId(draft.activeListId);
@@ -194,6 +194,40 @@ export default function Dashboard() {
     }
   }, [preferenceKey, preferencesReady]);
 
+  useEffect(() => {
+    void fetch("/api/instacart/status").then(response => response.json()).then(data => setShoppingEnabled(data.enabled === true)).catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (!authReady) return;
+    const params = new URLSearchParams(window.location.search);
+    const share = params.get("share");
+    const list = params.get("list");
+    const validShare = share && /^[a-f0-9]{64}$/.test(share);
+    const validList = list && /^[0-9a-f-]{36}$/i.test(list);
+    if (!validShare && !validList) return;
+    if (!session) { setOverlay("account"); return; }
+    if (validShare) { window.location.replace(`/share/${share}`); return; }
+    const destination = `${session.user.id}:${list}`;
+    if (openedDestination.current === destination) return;
+    openedDestination.current = destination;
+    void perform(async () => {
+      const data = await api(`/api/lists/${list}`);
+      openList(data.list);
+      window.history.replaceState(null, "", "/");
+    });
+  // Destination handling runs after draft restoration on an auth transition.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authReady, session?.user.id]);
+  function authRedirect() {
+    const params = new URLSearchParams(window.location.search);
+    const share = params.get("share"), list = params.get("list");
+    return window.location.origin + (share && /^[a-f0-9]{64}$/.test(share) ? `/?share=${share}` : list && /^[0-9a-f-]{36}$/i.test(list) ? `/?list=${list}` : "");
+  }
+  function updateItem(query: string, change: Partial<ItemDetails>) {
+    const key = normalizeQuery(query);
+    setItemDetails(current => ({ ...current, [key]: { ...(current[key] ?? defaultItemDetails()), ...change } }));
+    setResultUrl("");
+  }
   function clearResults() {
     requestRef.current?.abort();
     requestRef.current = null;
@@ -231,6 +265,7 @@ export default function Dashboard() {
       return;
     }
     setItems((current) => [...current, ...additions]);
+    setItemDetails(current => ({ ...current, ...Object.fromEntries(additions.map(query => [normalizeQuery(query), defaultItemDetails()])) }));
     setInput("");
     if (additions.length && accessToken)
       void searchProducts(
@@ -251,6 +286,12 @@ export default function Dashboard() {
       return;
     }
     const key = normalizeQuery(query);
+    setItemDetails(current => {
+      const nextDetails = { ...current };
+      nextDetails[normalizeQuery(next)] = { ...(current[key] ?? defaultItemDetails()), selectedProduct: null, chosenPreferences: undefined };
+      if (key !== normalizeQuery(next)) delete nextDetails[key];
+      return nextDetails;
+    });
     if (itemIds.current[key]) {
       itemIds.current[normalizeQuery(next)] = itemIds.current[key];
       delete itemIds.current[key];
@@ -445,6 +486,10 @@ export default function Dashboard() {
         .map((item) => [normalizeQuery(item.query), item.id!]),
     );
     setName(list.name);
+    setResultUrl(""); setShares([]);
+    setItemDetails(Object.fromEntries(list.grocery_list_items.filter(item => item.is_active).map(item => [normalizeQuery(item.query), {
+      clientId: crypto.randomUUID(), quantity: item.quantity ?? 1, unit: item.unit ?? "each", selectedProduct: item.selected_product ?? null,
+    }])));
     setItems(
       (list.grocery_list_items || [])
         .filter((item) => item.is_active)
@@ -460,6 +505,51 @@ export default function Dashboard() {
       if (!session) throw new Error("Sign in to access saved lists.");
       const data = await api("/api/lists");
       setLists(data.lists || []);
+    });
+  }
+  async function saveCurrentList() {
+    if (!session) throw new Error("Sign in to save and share your list.");
+    const dataItems = items.map((query, sort_order) => ({ query, sort_order, is_active: true,
+      id: itemIds.current[normalizeQuery(query)], ...(itemDetails[normalizeQuery(query)] ?? defaultItemDetails()),
+    }));
+    // Validate quantity/product pairs before any write. Empty existing lists can still be saved.
+    if (dataItems.length) snapshotSchema.parse({ name: name.trim(), items: dataItems });
+    const data = activeListId
+      ? await api(`/api/lists/${activeListId}`, "PATCH", { name: name.trim(), items: dataItems })
+      : await api("/api/lists", "POST", { name: name.trim(), items: dataItems });
+    const saved = data.list as SavedList;
+    setActiveListId(saved.id);
+    itemIds.current = Object.fromEntries(saved.grocery_list_items.map(item => [normalizeQuery(item.query), item.id]));
+    setLists(current => [saved, ...current.filter(list => list.id !== saved.id)]);
+    return saved;
+  }
+  async function openReview(mode: "share" | "shop") {
+    setResultUrl(""); setMessage(""); setShares([]);
+    if (!session) { setOverlay("account"); setMessage("Sign in to save your list and create a link."); return; }
+    setOverlay(mode);
+    if (mode === "share" && activeListId) await perform(async () => {
+      const data = await api(`/api/lists/${activeListId}/shares`);
+      setShares(data.shares ?? []);
+    });
+  }
+  async function submitReview(queries: string[]) {
+    await perform(async () => {
+      const saved = await saveCurrentList();
+      const itemIds = saved.grocery_list_items.filter(item => item.is_active && queries.includes(item.query)).map(item => item.id);
+      const mode = overlay === "share" ? "shares" : "instacart";
+      const data = await api(`/api/lists/${saved.id}/${mode}`, "POST", { itemIds, revision: saved.updated_at });
+      setResultUrl(data.url);
+      if (data.share) setShares(current => [data.share, ...current]);
+      else window.open(data.url, "_blank", "noopener,noreferrer");
+    });
+  }
+  async function revokeShare(id: string) {
+    if (!activeListId) return;
+    await perform(async () => {
+      await api(`/api/lists/${activeListId}/shares/${id}`, "DELETE");
+      if (shares.some(share => share.id === id && resultUrl.endsWith(share.token))) setResultUrl("");
+      setShares(current => current.map(share => share.id === id ? { ...share, revoked_at: new Date().toISOString() } : share));
+      setMessage("Sharing stopped for that snapshot.");
     });
   }
   async function markBought() {
@@ -496,6 +586,12 @@ export default function Dashboard() {
       bought={bought.includes(productKey(selection.product))}
       busy={busy}
       onBought={markBought}
+      onChoose={!quickMode && items.includes(selection.query) ? () => {
+        const item = itemDetails[normalizeQuery(selection.query)];
+        setPackageCount(item?.unit === "package" ? item.quantity : 1);
+        setOverlay("choose");
+      } : undefined}
+      chosen={itemDetails[normalizeQuery(selection.query)]?.selectedProduct?.providerProductId === selection.product.providerProductId}
       onOptions={() => showOptions(selection.query)}
     />
   );
@@ -550,6 +646,7 @@ export default function Dashboard() {
             onClick={() => {
               clearResults();
               setItems([]);
+              setItemDetails({}); setShares([]); setResultUrl("");
               setActiveListId(null);
               itemIds.current = {};
               setName("My grocery list");
@@ -613,13 +710,16 @@ export default function Dashboard() {
                 </p>
               </div>
               {!quickMode && (
-                <button
+                <div className="list-actions"><button
                   className="secondary-button"
                   disabled={searching || (!items.length && !activeListId)}
                   onClick={() => setOverlay("save")}
                 >
                   Save list
                 </button>
+                <button className="secondary-button" disabled={busy || !items.length} onClick={() => void openReview("share")}>Share list</button>
+                {shoppingEnabled && <button className="primary-button instacart-button" disabled={busy || !items.length} onClick={() => void openReview("shop")}><img src="/brand/instacart-carrot.svg" alt="" />Shop on Instacart</button>}
+                </div>
               )}
             </div>
             <div className="sticky-list-controls">
@@ -731,7 +831,7 @@ export default function Dashboard() {
                 return (
                   <article
                     className={`grocery-row ${selection && normalizeQuery(selection.query) === key ? "selected" : ""} ${complete ? "completed" : ""}`}
-                    key={key}
+                    key={itemDetails[key]?.clientId ?? key}
                     onDragOver={
                       !quickMode ? (e) => e.preventDefault() : undefined
                     }
@@ -768,6 +868,7 @@ export default function Dashboard() {
                       {complete && <Check size={16} />}
                     </button>
                     <div className="row-summary">
+                      {!quickMode && itemDetails[key]?.selectedProduct && <div className="chosen-product"><strong>Chosen product</strong><span>{itemDetails[key].selectedProduct!.title}</span><small>{itemDetails[key].quantity} package(s)</small><button className="text-button" onClick={() => updateItem(query, { selectedProduct: null, chosenPreferences: undefined })}>Clear choice</button></div>}
                       {quickMode ? (
                         <button
                           className="row-title"
@@ -913,6 +1014,8 @@ export default function Dashboard() {
                               current.filter((q) => q !== key),
                             );
                             setItems(items.filter((q) => q !== query));
+                            delete itemIds.current[key];
+                            setItemDetails(current => { const next = { ...current }; delete next[key]; return next; });
                             setResults(
                               results.filter(
                                 (r) => normalizeQuery(r.query) !== key,
@@ -1086,7 +1189,7 @@ export default function Dashboard() {
                         persistDraft();
                         const { error } = await supabase.auth.signInWithOAuth({
                           provider: "google",
-                          options: { redirectTo: window.location.origin },
+                          options: { redirectTo: authRedirect() },
                         });
                         if (error) throw error;
                       })
@@ -1102,7 +1205,7 @@ export default function Dashboard() {
                         persistDraft();
                         const { error } = await supabase.auth.signInWithOtp({
                           email,
-                          options: { emailRedirectTo: window.location.origin },
+                          options: { emailRedirectTo: authRedirect() },
                         });
                         if (error) throw error;
                         setMessage("Magic link sent. Check your email.");
@@ -1147,6 +1250,15 @@ export default function Dashboard() {
           )}
         </Sheet>
       )}
+      {(overlay === "share" || overlay === "shop") && <ListReview key={overlay} mode={overlay} name={name} onName={setName} items={items} details={itemDetails} checked={checked} preferenceKey={preferenceKey} busy={busy} message={message} resultUrl={resultUrl} shares={shares} onChange={updateItem} onSubmit={queries => void submitReview(queries)} onClose={() => setOverlay(null)} onRevoke={id => void revokeShare(id)} />}
+      {overlay === "choose" && selection && <Sheet title="Choose this product" onClose={() => setOverlay("detail")}>
+        <h3>{selection.product.title}</h3><p>{selection.product.packageSize || "Check the package size before shopping."}</p>
+        <p className="fine-print">Choose how many packages you need. This replaces the generic item’s quantity and unit.</p>
+        <form onSubmit={event => { event.preventDefault(); if (!Number.isInteger(packageCount) || packageCount < 1 || packageCount > 10000) return;
+          updateItem(selection.query, { quantity: packageCount, unit: "package", selectedProduct: pickProduct(selection.product), chosenPreferences: preferenceKey });
+          setOverlay(null); setMessage("Product chosen for your list.");
+        }}><label className="field-label" htmlFor="package-count">Packages</label><input className="text-input" id="package-count" type="number" min={1} max={10000} step={1} required value={packageCount} onChange={event => setPackageCount(Number(event.target.value))} /><button className="primary-button full-width">Use this product</button></form>
+      </Sheet>}
       {overlay === "save" && (
         <Sheet title="Save your grocery list" onClose={() => setOverlay(null)}>
           <p className="sheet-intro">Save a snapshot to return to next time.</p>
@@ -1154,37 +1266,7 @@ export default function Dashboard() {
             onSubmit={(e) => {
               e.preventDefault();
               void perform(async () => {
-                if (!session) throw new Error("Sign in to save your list.");
-                let savedId = activeListId;
-                if (activeListId) {
-                  await api(`/api/lists/${activeListId}`, "PATCH", {
-                    name: name.trim(),
-                    items: items.map((query, sort_order) => ({
-                      id: itemIds.current[normalizeQuery(query)],
-                      query,
-                      sort_order,
-                      is_active: true,
-                    })),
-                  });
-                } else {
-                  const data = await api("/api/lists", "POST", {
-                    name: name.trim(),
-                    items,
-                  });
-                  savedId = data.list.id;
-                  setActiveListId(savedId);
-                }
-                const refreshed = await api("/api/lists");
-                setLists(refreshed.lists || []);
-                const saved = (refreshed.lists as SavedList[]).find(
-                  (list) => list.id === savedId,
-                );
-                if (saved)
-                  itemIds.current = Object.fromEntries(
-                    (saved.grocery_list_items ?? [])
-                      .filter((item) => item.id)
-                      .map((item) => [normalizeQuery(item.query), item.id!]),
-                  );
+                await saveCurrentList();
                 setOverlay(null);
                 setMessage("List saved.");
               });

@@ -1,3 +1,4 @@
+import { snapshotItemSchema, type ItemDetails } from "@/lib/listSharing";
 import { normalizeQuery } from "@/lib/utils";
 
 export type GroceryDraft = {
@@ -7,6 +8,7 @@ export type GroceryDraft = {
   checked: string[];
   activeListId: string | null;
   itemIds: Record<string, string>;
+  itemDetails?: Record<string, ItemDetails>;
 };
 export const EMPTY_GROCERY_DRAFT: GroceryDraft = {
   name: "Weekly groceries", items: [], input: "", checked: [], activeListId: null, itemIds: {},
@@ -32,7 +34,21 @@ function parse(raw: string | null): GroceryDraft | null {
     const activeListId = typeof value.activeListId === "string" && uuid.test(value.activeListId) ? value.activeListId : null;
     const itemIds = Object.fromEntries(Object.entries(value.itemIds ?? {}).filter(([query, id]) =>
       seen.has(query) && typeof id === "string" && uuid.test(id)));
+    const itemDetails: Record<string, ItemDetails> = {};
+    if (value.itemDetails && typeof value.itemDetails === "object") {
+      for (const query of items) {
+        const normalized = normalizeQuery(query), item = value.itemDetails[normalized];
+        const valid = snapshotItemSchema.safeParse({ ...item, query });
+        if (valid.success && typeof item?.clientId === "string" && uuid.test(item.clientId)) {
+          const { query: _query, ...fields } = valid.data;
+          itemDetails[normalized] = { ...fields, clientId: item.clientId,
+            ...(typeof item.chosenPreferences === "string" && item.chosenPreferences.length < 10000 ? { chosenPreferences: item.chosenPreferences } : {}),
+          };
+        }
+      }
+    }
     return { name: value.name, items, input: value.input,
+      ...(value.itemDetails ? { itemDetails } : {}),
       checked: [...new Set<string>(value.checked.filter((query: unknown) => typeof query === "string" && seen.has(query)))],
       activeListId, itemIds: activeListId ? itemIds as Record<string, string> : {},
     };

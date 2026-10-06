@@ -6,6 +6,9 @@ import {
 } from "@/lib/api";
 import { requireAdminSupabase } from "@/lib/supabase";
 
+import { quantitySchema, selectedProductSchema, LIST_UNITS, PRIVATE_HEADERS } from "@/lib/listSharing";
+import { ownedList } from "@/lib/listRepository";
+
 const updateSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   items: z
@@ -15,6 +18,9 @@ const updateSchema = z.object({
         query: z.string().min(1).max(160),
         sort_order: z.number().int().nonnegative(),
         is_active: z.boolean().optional(),
+        quantity: quantitySchema.optional(),
+        unit: z.enum(LIST_UNITS).optional(),
+        selectedProduct: selectedProductSchema.nullable().optional(),
       }),
     )
     .max(100)
@@ -43,10 +49,10 @@ export async function PATCH(
     });
     if (error?.code === "42501")
       throw new ApiError("List or item not found.", 404);
-    if (error?.code === "22023" || error?.code === "22P02")
+    if (error?.code === "22023" || error?.code === "22P02" || error?.code === "23514")
       throw new ApiError("Invalid list update.", 400);
     if (error) throw error;
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, list: await ownedList(user.id, listId) }, { headers: PRIVATE_HEADERS });
   } catch (error) {
     return handleRouteError(error);
   }
@@ -93,4 +99,11 @@ async function assertOwnsList(
     .single();
 
   if (error || !data) throw new ApiError("List not found.", 404);
+}
+
+export async function GET(request: Request, context: { params: Promise<{ listId: string }> }) {
+  try {
+    const { user } = await requireUserAndEntitlement(request);
+    return Response.json({ list: await ownedList(user.id, (await context.params).listId) }, { headers: PRIVATE_HEADERS });
+  } catch (error) { return handleRouteError(error); }
 }

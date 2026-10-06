@@ -29,6 +29,8 @@ export function ProductDetail({
   busy,
   onBought,
   onOptions,
+  onChoose,
+  chosen,
 }: {
   product: RankedProduct;
   allergies: Allergen[];
@@ -36,6 +38,8 @@ export function ProductDetail({
   busy: boolean;
   onBought: () => void;
   onOptions: () => void;
+  onChoose?: () => void;
+  chosen?: boolean;
 }) {
   const [tab, setTab] = useState("Nutrition");
   const [expandedTag, setExpandedTag] = useState<string | null>(null);
@@ -403,6 +407,7 @@ export function ProductDetail({
         </details>
       )}
       <div className="detail-actions">
+        {onChoose && <button className="primary-button full-width" onClick={onChoose}>{chosen ? "Update chosen quantity" : "Use this product"}</button>}
         <button className="primary-button full-width" onClick={onOptions}>
           See all options
         </button>

@@ -1586,3 +1586,45 @@ button:focus-visible .price-tooltip {
 .nutrition-explanation p { margin-top: 8px; }
 .facts-heading label { font-size: 12px; }
 .facts-heading select { max-width: 160px; padding: 5px; border: 1px solid #ddd; border-radius: 6px; background: white; color: #222; }
+
+/* List handoff and read-only shared snapshots. */
+.list-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.page-heading > .list-actions { justify-content: flex-end; }
+.review-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.review-item { padding: 18px 0; border-bottom: 1px solid var(--border, #e5e5e2); }
+.review-include { display: flex; gap: 10px; align-items: center; overflow-wrap: anywhere; }
+.review-include input { width: 20px; height: 20px; flex-shrink: 0; accent-color: #111; }
+.review-product { display: flex; gap: 12px; margin: 12px 0; align-items: center; }
+.review-product img { width: 54px; height: 64px; object-fit: contain; }
+.review-product span, .review-product small { display: block; overflow-wrap: anywhere; }
+.quantity-fields { display: flex; gap: 12px; margin: 12px 0; }
+.quantity-fields label { display: flex; flex: 1; flex-direction: column; gap: 6px; min-width: 0; font-size: 13px; }
+.quantity-fields input, .quantity-fields select { background: white; width: 100%; border: 1px solid #d5d5d0; border-radius: 8px; min-height: 44px; padding: 8px; color: #111; font-size: 16px; }
+.list-result { display: grid; gap: 14px; margin: 20px 0; }
+.share-management { margin-top: 24px; }
+.share-row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 0; border-bottom: 1px solid #e5e5e2; }
+.share-row > span { font-size: 13px; }
+.chosen-product { border-left: 3px solid #18683b; padding-left: 10px; margin-bottom: 10px; display: grid; gap: 3px; }
+.chosen-product strong { font-size: 11px; color: #18683b; text-transform: uppercase; letter-spacing: .03em; }
+.chosen-product span { font-size: 13px; overflow-wrap: anywhere; }
+.chosen-product small { font-size: 12px; color: #70706c; }
+.chosen-product .text-button { justify-self: start; font-size: 12px; }
+.shared-list-page { max-width: 760px; margin: 0 auto; padding: 40px 24px 80px; }
+.shared-list-page h1 { margin: 8px 0 16px; font-size: 32px; overflow-wrap: anywhere; }
+.shared-list-page .eyebrow { margin-top: 36px; color: #70706c; }
+.shared-items { margin: 28px 0; border-top: 1px solid #e5e5e2; }
+.shared-item { display: flex; gap: 18px; padding: 22px 0; border-bottom: 1px solid #e5e5e2; }
+.shared-item img { width: 70px; height: 88px; object-fit: contain; flex-shrink: 0; }
+.shared-item h2 { font-size: 18px; margin: 0 0 8px; }
+.shared-item p { margin: 6px 0; overflow-wrap: anywhere; }
+.shared-item small { color: #70706c; }
+.shared-list-page > .fine-print { margin-top: 16px; }
+@media (max-width: 640px) {
+  .page-heading { flex-wrap: wrap; }
+  .page-heading > .list-actions { width: 100%; justify-content: flex-start; }
+  .page-heading .list-actions button { font-size: 12px; padding: 10px 12px; }
+  .shared-list-page { padding: 24px 18px 60px; }
+}
+
+.instacart-button { background: #003d29; color: #faf1e5; border-radius: 999px; min-height: 46px; padding: 12px 18px; gap: 10px; }
+.instacart-button img { width: 22px; height: 22px; object-fit: contain; }

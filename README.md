@@ -49,7 +49,7 @@ A later recipe-first mode accepts meals for each day and number of people, then 
 
 Explore local voice models for spoken list entry. Speech transcription is separate from a text model such as Qwen, which can turn transcripts into structured lists and eventually use recipe search tools to extract ingredients.
 
-Later, people can share recipe photos with ingredient lists that others can add directly to their groceries. Photo import, scanning, social sharing, Instacart export, and share-as-image all require separate implementation.
+Later, people can share recipe photos with ingredient lists that others can add directly to their groceries. Photo import, scanning, social posts, and share-as-image require separate implementation. Grocery snapshot sharing is implemented; Instacart export is implemented behind a configuration flag.
 
 ## Current App
 
@@ -59,6 +59,8 @@ Later, people can share recipe photos with ingredient lists that others can add 
 - Exact-barcode Open Prices observations, nutrition and diet annotations, tags, allergen checks, and beta FODMAP signals.
 - All 29 requested OFF attribute preferences with four importance levels, mandatory evidence filters, ingredient exclusions, and migration of existing selections. Shopping search is no longer used.
 - Browser drafts preserve grocery order, checkoffs, list names and unsubmitted input across reloads and sign-in redirects. Drafts are separated by account; signed-out drafts transfer on sign-in. This is local recovery, not cloud saving.
+- Snapshot share links with public read-only pages, owner revocation, and authenticated independent copies. Lists retain editable quantities and explicitly chosen products.
+- Server-side Instacart shopping-list export with generic ingredients, chosen-product UPC matching, duplicate UPC consolidation, and cached links. Hidden until Instacart access and credentials are configured; see [sharing and shopping setup](docs/LIST_SHARING.md).
 - Supabase saved-list and bought-product APIs. Stripe checkout/webhook code is scaffolding only; Stripe is not set up yet.
 - Shared Upstash Redis caching and rolling request/provider budgets; Redis is required for production search.
 
@@ -66,7 +68,7 @@ The Meezany refresh adds compact grocery rows, a navigation rail, a desktop prod
 
 **Current access behavior:** All users retain feature access, with a default budget of 100 searched items per rolling day. Subscription status reflects actual active/trialing subscriptions. Saved lists and bought history require authenticated users. See [Backend implementation](docs/BACKEND.md) for data contracts, limits, migrations, and verification.
 
-**Not shipped:** AI recipes; exact local inventory/prices; voice/photo/barcode entry; autocomplete; Instacart export; share-as-image; social posts; meal calendar; per-item preferences; calibrated category-relative health scores; and new preference types without ranking/data support.
+**Not shipped:** AI recipes; exact local inventory/prices; voice/photo/barcode entry; autocomplete; share-as-image; social posts; meal calendar; per-item preferences; calibrated category-relative health scores; and new preference types without ranking/data support.
 
 ## Paid Features
 
@@ -124,6 +126,11 @@ For local Workers-runtime preview, run `npm run preview:cloudflare`. Configure C
 | `POST /api/lists` | Create list and items |
 | `PATCH /api/lists/:listId` | Update name/items/order/active state |
 | `DELETE /api/lists/:listId` | Soft-delete list |
+| `GET/POST /api/lists/:listId/shares` | List or create snapshot links |
+| `DELETE /api/lists/:listId/shares/:shareId` | Revoke snapshot access |
+| `POST /api/lists/:listId/instacart` | Export reviewed saved items |
+| `POST /api/shares/:token/copy` | Save an independent authenticated copy |
+| `POST /api/shares/:token/instacart` | Shop a public snapshot |
 | `POST /api/bought-products` | Record a bought product |
 | `POST /api/stripe/checkout` | Subscription checkout |
 | `POST /api/stripe/webhook` | Synchronize subscription state |
